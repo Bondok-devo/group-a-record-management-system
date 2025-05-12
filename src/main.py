@@ -10,6 +10,8 @@ configuration file, and launches the Graphical User Interface (GUI).
 import sys
 # import os # Removed as os is not used in the current version of this file
 from datetime import datetime # Used in the demonstration function
+import tkinter as tk
+from gui.gui import TravelApp
 
 # --- Path Setup ---
 # This ensures that the 'src' directory is treated as a package root,
@@ -66,26 +68,28 @@ def initialize_managers(app_config):
     print("Data managers initialized successfully.")
     return client_mgr, airline_mgr, flight_mgr
 
+
 def run_gui_application(client_mgr, airline_mgr, flight_mgr):
     """
     Initializes and runs the Graphical User Interface.
 
     This function sets up the main application window and starts the
     GUI event loop. The managers are passed to the GUI to enable data interaction.
-    (Currently a placeholder).
-    """
+
     print("\n--- GUI Application (Placeholder) ---")
     print("The graphical user interface would start here, using the managers.")
     print(f"Current client records: {len(client_mgr.get_all_clients())}")
     print(f"Current airline records: {len(airline_mgr.get_all_airlines())}")
     print(f"Current flight records: {len(flight_mgr.get_all_flights())}")
-    # Example of how GUI might be launched (e.g., with Tkinter):
-    # import tkinter as tk
-    # from gui.main_app_window import MainApplicationWindow # Assuming this class exists
-    # root = tk.Tk()
-    # app = MainApplicationWindow(root, client_mgr, airline_mgr, flight_mgr)
-    # root.mainloop()
-    print("--- End of GUI Placeholder ---")
+    """
+    root = tk.Tk()
+    app = TravelApp(root, client_mgr, airline_mgr, flight_mgr)  # Pass managers here
+    root.protocol("WM_DELETE_WINDOW", app.on_close)
+    root.mainloop()
+    """
+    print("--- End of GUI Placeholder ---")    
+    """
+
 
 def demonstrate_manager_interactions(client_mgr, airline_mgr, flight_mgr):
     """
