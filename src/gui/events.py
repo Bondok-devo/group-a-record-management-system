@@ -43,20 +43,24 @@ def update_fields(app):
     """
     Update the form fields in the GUI based on the selected category.
 
+    This method clears the form and dynamically creates label-entry pairs using the
+    display names from fields_config. It also stores the corresponding internal field
+    keys in app.field_names for consistent record creation.
+
     Args:
-        app: The main application instance containing the form configuration.
+        app: The main application instance containing field configuration and widgets.
     """
     for widget in app.form_frame.winfo_children():
         widget.destroy()
     app.entries.clear()
-    fields = app.fields_config[app.selected_category.get()]
-    for i, field in enumerate(fields):
-        label = tk.Label(app.form_frame, text=field + ":")
+    config = app.fields_config[app.selected_category.get()]
+    app.field_names = list(config.values())
+    for i, (label_text, field_key) in enumerate(config.items()):
+        label = tk.Label(app.form_frame, text=f"{label_text}:")
         label.grid(row=i, column=0, sticky="e", padx=5, pady=2)
         entry = tk.Entry(app.form_frame)
         entry.grid(row=i, column=1, padx=5, pady=2)
         app.entries.append(entry)
-
 def on_select(app):
     """
     Handle the selection of a record in the listbox and populate the form fields.
@@ -76,16 +80,18 @@ def on_select(app):
 
 def get_form_data(app):
     """
-    Retrieve data entered in the form fields.
+    Retrieve data entered in the form fields as a dictionary.
+
+    This uses the field names stored in app.field_names to build a key-value
+    mapping from each entry field.
 
     Args:
-        app: The main application instance containing the form entries.
+        app: The main application instance with form entries and field names.
 
     Returns:
-        list: A list of values entered in the form fields.
+        dict: A dictionary of field names to user-provided values.
     """
-    return [entry.get() for entry in app.entries]
-
+    return {field: entry.get() for field, entry in zip(app.field_names, app.entries)}
 def clear_form(app):
     """
     Clear the form fields and reset the selected index.
@@ -100,18 +106,28 @@ def clear_form(app):
 
 def add_record(app):
     """
-    Add a new record based on the form data.
+    Add a new record based on the form data and selected category.
 
     Args:
         app: The main application instance containing the form data and managers.
     """
     data = get_form_data(app)
-    manager = get_manager(app.selected_category.get(), app)
-    if manager.add(data):
+    category = app.selected_category.get()
+    manager = get_manager(category, app)
+
+    success = False
+    if category == "Client":
+        success = manager.add_client(data)
+    elif category == "Airline":
+        success = manager.add_airline(data)
+    elif category == "Flight":
+        success = manager.add_flight(data)
+
+    if success:
         load_records(app)
         clear_form(app)
     else:
-        messagebox.showerror("Error", "Failed to add record.")
+        messagebox.showerror("Error", f"Failed to add {category.lower()} record.")
 
 def update_record(app):
     """
@@ -124,7 +140,7 @@ def update_record(app):
         data = get_form_data(app)
         manager = get_manager(app.selected_category.get(), app)
         record = app.filtered_records[app.selected_index]
-        if manager.update(record, data):
+        if manager.update_client(record, data):
             load_records(app)
             clear_form(app)
         else:
@@ -140,7 +156,7 @@ def delete_record(app):
     if app.selected_index is not None:
         manager = get_manager(app.selected_category.get(), app)
         record = app.filtered_records[app.selected_index]
-        if manager.delete(record):
+        if manager.delete_client(record):
             load_records(app)
             clear_form(app)
         else:

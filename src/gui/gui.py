@@ -26,15 +26,33 @@ class TravelApp:
         self.root.title("Specialist Travel Agent Records")
         self.selected_index = None
 
-        self.fields_config = {
-            "Client": ["ID", "Name", "Address Line 1", "Address Line 2", "Address Line 3",
-                       "City", "State", "Zip Code", "Country", "Phone Number"],
-            "Airline": ["ID", "Company Name"],
-            "Flight": ["Client_ID", "Airline_ID", "Date", "Time"]
-        }
 
         self.selected_category = tk.StringVar(value="Client")
         self.entries = []
+        self.fields_config = {
+            "Client": {
+                "Name": "name",
+                "Address Line 1": "address_line_1",
+                "Address Line 2": "address_line_2",
+                "Address Line 3": "address_line_3",
+                "City": "city",
+                "State": "state",
+                "Zip Code": "zip_code",
+                "Country": "country",
+                "Phone Number": "phone_number"
+            },
+            "Airline": {
+                "ID": "id",
+                "Company Name": "company_name"
+            },
+            "Flight": {
+                "Client ID": "client_id",
+                "Airline ID": "airline_id",
+                "Date": "date",
+                "Time": "time"
+            }
+        }
+
         self.setup_widgets()
         events.load_records(self)
 
