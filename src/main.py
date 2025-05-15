@@ -8,33 +8,39 @@ configuration file, and launches the Graphical User Interface (GUI).
 """
 
 import sys
-# import os # Removed as os is not used in the current version of this file
+import os # Required for path manipulation
 from datetime import datetime # Used in the demonstration function
+import tkinter as tk
+# Original import for TravelApp, moved below path setup.
+# from src.gui.gui import TravelApp
 
 # --- Path Setup ---
-# This ensures that the 'src' directory is treated as a package root,
-# allowing for imports like 'from record.client_manager import ClientManager'
+# Modifying sys.path to ensure 'src' can be imported as a top-level package
 # when running main.py from the project's root directory (e.g., GROUP-A/).
-# Uncomment if you encounter import errors.
-# current_dir = os.path.dirname(os.path.abspath(__file__)) # src/
-# project_root = os.path.dirname(current_dir) # GROUP-A/
-# if project_root not in sys.path:
-#     sys.path.insert(0, project_root)
+current_script_dir = os.path.dirname(os.path.abspath(__file__)) # expected: /path/to/GROUP-A/src
+project_root_dir = os.path.dirname(current_script_dir) # expected: /path/to/GROUP-A
+
+if project_root_dir not in sys.path:
+    sys.path.insert(0, project_root_dir)
 
 try:
-    # Import the manager classes for each record type.
-    from record.client_manager import ClientManager
-    from record.airline_manager import AirlineManager
-    from record.flight_manager import FlightManager
-    # Import the configuration loader
-    from conf import config_loader # Assumes __init__.py in src/conf/
+    # Import the GUI class
+    from src.gui.gui import TravelApp
+
+    # Import the manager classes for each record type using the 'src' prefix
+    from src.record.client_manager import ClientManager
+    from src.record.airline_manager import AirlineManager
+    from src.record.flight_manager import FlightManager
+    # Import the configuration loader using the 'src' prefix
+    from src.conf import config_loader # Assumes __init__.py in src/conf/
 except ImportError as import_error:
     print(f"Fatal Error: Could not import necessary modules: {import_error}")
     print("Troubleshooting tips:")
     print("- Ensure this script is run from the project's root directory (GROUP-A).")
-    print("- Verify that __init__.py files exist in 'src/', 'src/record/', "
-          "and 'src/conf/' directories.") # Line broken for length
+    print("- Verify that __init__.py files exist in 'src/', 'src/gui/', 'src/record/', "
+          "and 'src/conf/' directories.")
     print("- Check your PYTHONPATH environment variable if issues persist.")
+    print(f"Current sys.path: {sys.path}")
     sys.exit(1) # Exit if core components can't be loaded.
 
 def initialize_managers(app_config):
@@ -66,26 +72,18 @@ def initialize_managers(app_config):
     print("Data managers initialized successfully.")
     return client_mgr, airline_mgr, flight_mgr
 
+
 def run_gui_application(client_mgr, airline_mgr, flight_mgr):
     """
     Initializes and runs the Graphical User Interface.
 
     This function sets up the main application window and starts the
     GUI event loop. The managers are passed to the GUI to enable data interaction.
-    (Currently a placeholder).
     """
-    print("\n--- GUI Application (Placeholder) ---")
-    print("The graphical user interface would start here, using the managers.")
-    print(f"Current client records: {len(client_mgr.get_all_clients())}")
-    print(f"Current airline records: {len(airline_mgr.get_all_airlines())}")
-    print(f"Current flight records: {len(flight_mgr.get_all_flights())}")
-    # Example of how GUI might be launched (e.g., with Tkinter):
-    # import tkinter as tk
-    # from gui.main_app_window import MainApplicationWindow # Assuming this class exists
-    # root = tk.Tk()
-    # app = MainApplicationWindow(root, client_mgr, airline_mgr, flight_mgr)
-    # root.mainloop()
-    print("--- End of GUI Placeholder ---")
+    root = tk.Tk()
+    app = TravelApp(root, client_mgr, airline_mgr, flight_mgr)  # Pass managers here
+    root.protocol("WM_DELETE_WINDOW", app.on_close)
+    root.mainloop()
 
 def demonstrate_manager_interactions(client_mgr, airline_mgr, flight_mgr):
     """
@@ -150,12 +148,16 @@ def demonstrate_manager_interactions(client_mgr, airline_mgr, flight_mgr):
               f"Temp Airline ID: {temp_airline_for_flight.airline_id}")
         current_time = datetime.now()
         demo_flight_data = {
-            "record_type": "Flight", "Client_ID": temp_client_for_flight.client_id,
-            "Airline_ID": temp_airline_for_flight.airline_id,
-            "Date": datetime(
+            "record_type": "Flight",
+            # Ensure keys match FlightRecord expectations, e.g., 'client_id' not 'Client_ID'
+            "client_id": temp_client_for_flight.client_id,
+            "airline_id": temp_airline_for_flight.airline_id,
+            "date": datetime(
                 current_time.year, current_time.month, current_time.day, 14, 0
-            ).isoformat(),
-            "Start City": "Config Origin", "End City": "Config Destination"
+            ).isoformat(), # Assuming your FlightRecord expects ISO format date string
+            # "Start City": "Config Origin", # These might not be direct FlightRecord fields
+            # "End City": "Config Destination" # Adjust based on FlightRecord attributes
+            # Add other required fields for FlightRecord if any
         }
         added_demo_flight = flight_mgr.add_flight(demo_flight_data)
         if added_demo_flight:
@@ -170,8 +172,13 @@ def demonstrate_manager_interactions(client_mgr, airline_mgr, flight_mgr):
     # Clean up the added demo flight
     if current_flights_count > initial_flights_count and added_demo_flight:
         # delete_flight requires the identifying details dictionary
-        flight_mgr.delete_flight(added_demo_flight.to_dict())
-        print("Cleaned up demo flight.")
+        # Ensure to_dict() method exists on your FlightRecord objects
+        if hasattr(added_demo_flight, 'to_dict'):
+            flight_mgr.delete_flight(added_demo_flight.to_dict())
+            print("Cleaned up demo flight.")
+        else:
+            print("Could not clean up demo flight: to_dict() method missing or flight not added.")
+
 
     # Clean up temporary client and airline used for the flight demo
     if temp_client_for_flight:
@@ -204,7 +211,7 @@ def main():
     # Note: This affects the actual data files specified in config.ini.
     # demonstrate_manager_interactions(client_mgr, airline_mgr, flight_mgr)
 
-    # Launch the Graphical User Interface (currently a placeholder).
+    # Launch the Graphical User Interface.
     run_gui_application(client_mgr, airline_mgr, flight_mgr)
 
     print("\nTravel Agent Record Management System finished.")
