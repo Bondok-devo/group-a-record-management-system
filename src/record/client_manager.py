@@ -9,7 +9,7 @@ import json
 import os
 from typing import List, Dict, Optional, Any
 
-# client_record.py (with ClientRecord class) is in the same package.
+# Assumes client_record.py (with ClientRecord class) is in the same package.
 # An empty __init__.py in 'src/record/' makes 'record' a package.
 from .client_record import ClientRecord
 
@@ -51,8 +51,6 @@ class ClientManager:
         """
         self._clients = []
         if not os.path.exists(self.clients_file_path):
-            # If the file doesn't exist, that's okay for loading;
-            # it will be created when/if _save_clients is called.
             return
 
         highest_id_found = 0
@@ -66,25 +64,24 @@ class ClientManager:
                     try:
                         data = json.loads(line_content)
                         if data.get("record_type") == "Client":
-                            client = ClientRecord.from_dict(data)
-                            self._clients.append(client)
-                            if client.client_id and client.client_id > highest_id_found:
-                                highest_id_found = client.client_id
+                            client_obj = ClientRecord.from_dict(data)
+                            self._clients.append(client_obj)
+                            if client_obj.client_id and client_obj.client_id > highest_id_found:
+                                highest_id_found = client_obj.client_id
                     except json.JSONDecodeError:
                         print(f"Warning: Invalid JSON on line {line_number} in "
                               f"'{self.clients_file_path}'. Skipping.")
                     except ValueError as e:
                         print(f"Warning: Invalid data for record on line {line_number} "
                               f"in '{self.clients_file_path}': {e}. Skipping.")
-                    except TypeError as e:
+                    except TypeError as e: # Catching TypeError specifically
                         print(f"Warning: Type error for record on line {line_number} "
                               f"in '{self.clients_file_path}': {e}. Skipping.")
-        except IOError as e:
-            print(f"Warning: Could not read '{self.clients_file_path}': {e}. "
-                  "Starting with no clients.")
-        except Exception as e:
-            # This broad exception is a last resort to prevent crashing during load.
-            print(f"An unexpected error occurred loading clients: {e}")
+        except OSError as e: # Catches IOError, FileNotFoundError, PermissionError etc.
+            print(f"OS error occurred loading '{self.clients_file_path}' "
+                  f"({type(e).__name__}): {e}. Starting with no clients.")
+        except Exception as e: # General fallback for truly unexpected errors during load
+            print(f"An unexpected error occurred loading clients ({type(e).__name__}): {e}")
 
         self._next_id = highest_id_found + 1
 
@@ -99,9 +96,8 @@ class ClientManager:
             True if saving was successful, False otherwise.
         """
         try:
-            # Ensure the directory for the specific data file exists
             file_directory = os.path.dirname(self.clients_file_path)
-            if file_directory: # Check if there's a directory part (not just filename)
+            if file_directory:
                 os.makedirs(file_directory, exist_ok=True)
 
             with open(self.clients_file_path, 'w', encoding='utf-8') as file:
@@ -111,13 +107,12 @@ class ClientManager:
                     json.dump(client_dict, file)
                     file.write('\n')
             return True
-        except IOError as e:
-            print(f"Error: Could not write to '{self.clients_file_path}': {e}. "
-                  "Changes may not be saved.")
+        except OSError as e: # Catches IOError, PermissionError etc.
+            print(f"OS error occurred while saving to '{self.clients_file_path}' "
+                  f"({type(e).__name__}): {e}. Changes may not be saved.")
             return False
-        except Exception as e:
-            # This broad exception is a last resort for saving errors.
-            print(f"An unexpected error occurred while saving clients: {e}")
+        except Exception as e: # General fallback for truly unexpected errors during save
+            print(f"An unexpected error occurred while saving clients ({type(e).__name__}): {e}")
             return False
 
     def _generate_id(self) -> int:
@@ -148,20 +143,27 @@ class ClientManager:
             self._clients.append(new_client)
             if self._save_clients():
                 return new_client
-            # Rollback if save failed
             self._clients.pop()
-            self._next_id -= 1
+            self._next_id -= 1 # Rollback ID increment if save failed
             print("Error: Failed to save after adding client. Client not added.")
             return None
         except ValueError as e:
             print(f"Error: Could not add client. Invalid data: {e}")
-            self._next_id -= 1 # Rollback ID
-            return None
-        except Exception as e:
-            # This broad exception is a last resort for add operation errors.
-            print(f"An unexpected error occurred while adding client: {e}")
             self._next_id -= 1
             return None
+        except TypeError as e:
+            print(f"Error: Could not add client due to type issue: {e}")
+            self._next_id -= 1
+            return None
+        except OSError as e: # Specific exception for save issues if not caught by _save_clients
+            print(f"Error: OS error during add client operation ({type(e).__name__}): {e}")
+            self._next_id -= 1
+            return None
+        except Exception as e: # General fallback for truly unexpected errors
+            print(f"An unexpected error occurred while adding client ({type(e).__name__}): {e}")
+            self._next_id -= 1
+            return None
+
 
     def get_client_by_id(self, client_id: int) -> Optional[ClientRecord]:
         """
@@ -187,7 +189,68 @@ class ClientManager:
         Returns:
             A list of ClientRecord objects (a copy of the internal list).
         """
-        return self._clients[:] # Return a shallow copy
+        return self._clients[:]
+
+    def find_clients(self, criteria: Dict[str, Any]) -> List[ClientRecord]:
+        """
+        Finds clients matching all provided criteria.
+
+        For string fields, performs a case-insensitive "contains" search.
+        For other fields (like 'client_id'), performs an exact match.
+
+        Args:
+            criteria: A dictionary where keys are attribute names of ClientRecord
+                      (e.g., "name", "city", "client_id") and values are the
+                      search terms.
+
+        Returns:
+            A list of ClientRecord objects that match all criteria.
+            Returns an empty list if no matches are found.
+        """
+        if not criteria:
+            return self.get_all_clients()
+
+        results: List[ClientRecord] = []
+        for client_record in self._clients:
+            match_all_criteria = True
+            for key, search_value in criteria.items():
+                if not hasattr(client_record, key):
+                    match_all_criteria = False
+                    break
+
+                client_value = getattr(client_record, key)
+
+                if search_value is None:
+                    if client_value is not None:
+                        match_all_criteria = False
+                        break
+                    continue
+
+                if client_value is None:
+                    match_all_criteria = False
+                    break
+
+                if isinstance(client_value, str) and isinstance(search_value, str):
+                    if search_value.lower() not in client_value.lower():
+                        match_all_criteria = False
+                        break
+                elif not isinstance(client_value, str):
+                    try:
+                        typed_search_value = type(client_value)(search_value)
+                        if client_value != typed_search_value:
+                            match_all_criteria = False
+                            break
+                    except (ValueError, TypeError):
+                        match_all_criteria = False
+                        break
+                elif isinstance(client_value, str) and not isinstance(search_value, str):
+                    match_all_criteria = False
+                    break
+            if match_all_criteria:
+                results.append(client_record)
+        return results
+
+    search = find_clients
 
     def update_client(self, client_id: int,
                       update_info: Dict[str, Any]) -> Optional[ClientRecord]:
@@ -226,14 +289,13 @@ class ClientManager:
                     changed_fields = True
 
         if not changed_fields:
-            return client_to_update # No changes made
+            return client_to_update
 
         try:
             updated_client_obj = ClientRecord.from_dict(current_data)
             self._clients[client_index] = updated_client_obj
             if self._save_clients():
                 return updated_client_obj
-            # Rollback if save failed
             self._clients[client_index] = ClientRecord.from_dict(original_data_backup)
             print(f"Error: Failed to save updates for client ID {client_id}. "
                   "Changes rolled back.")
@@ -242,10 +304,21 @@ class ClientManager:
             print(f"Error: Could not update client ID {client_id}. "
                   f"Invalid data after update: {e}")
             return None
-        except Exception as e:
-            # This broad exception is a last resort for update operation errors.
-            print(f"An unexpected error occurred while updating client {client_id}: {e}")
+        except TypeError as e:
+            print(f"Error: Could not update client ID {client_id} due to type issue: {e}")
             return None
+        except OSError as e: # Specific exception for save/OS issues
+            print(f"Error: OS error during update client operation for ID {client_id} "
+                  f"({type(e).__name__}): {e}")
+            self._clients[client_index] = ClientRecord.from_dict(original_data_backup)
+            return None
+        except Exception as e: # General fallback
+            error_msg = (f"An unexpected error occurred while updating client "
+                         f"{client_id} ({type(e).__name__}): {e}")
+            print(error_msg)
+            self._clients[client_index] = ClientRecord.from_dict(original_data_backup)
+            return None
+
 
     def delete_client(self, client_id: int) -> bool:
         """
@@ -266,12 +339,11 @@ class ClientManager:
                 break
 
         if not client_to_delete:
-            return False # Client not found
+            return False
 
         self._clients.pop(client_index)
         if self._save_clients():
             return True
-        # Rollback if save failed
         self._clients.insert(client_index, client_to_delete)
         print(f"Error: Failed to save after deleting client ID {client_id}. "
               "Deletion rolled back.")
@@ -281,29 +353,19 @@ class ClientManager:
 if __name__ == "__main__":
     print("--- ClientManager Direct Test ---")
 
-    # Determine the project root directory (GROUP-A) to correctly place temp_test_output
-    # This assumes client_manager.py is in src/record/
     current_script_path = os.path.abspath(__file__)
-    # Expected structure: .../GROUP-A/src/record/client_manager.py
-    # record_dir is .../GROUP-A/src/record/
     record_dir = os.path.dirname(current_script_path)
-    # src_dir is .../GROUP-A/src/
     src_dir = os.path.dirname(record_dir)
-    # project_root is .../GROUP-A/
     project_root = os.path.dirname(src_dir)
 
-    # Define the path for test data, ensuring it's outside src/
     TEST_DATA_SUBDIR_NAME = "client_manager_test_data"
-    TEMP_TEST_OUTPUT_ROOT_DIR_NAME = "temp_test_output" # This folder should be in .gitignore
+    TEMP_TEST_OUTPUT_ROOT_DIR_NAME = "temp_test_output"
 
-    # Construct the full path for the temporary test data directory
     test_data_specific_folder = os.path.join(project_root,
                                              TEMP_TEST_OUTPUT_ROOT_DIR_NAME,
                                              TEST_DATA_SUBDIR_NAME)
-    # The actual test data file name
-    TEST_DATA_FILE_NAME = "client_record.jsonl" # Renamed to UPPER_CASE
+    TEST_DATA_FILE_NAME = "client_record.jsonl"
     test_file_full_path = os.path.join(test_data_specific_folder, TEST_DATA_FILE_NAME)
-
 
     if not os.path.exists(test_data_specific_folder):
         os.makedirs(test_data_specific_folder, exist_ok=True)
@@ -311,40 +373,48 @@ if __name__ == "__main__":
 
     print("Test block assumes 'from .client_record import ClientRecord' at the top is working.")
 
-    # Initialize manager with the specific test file path
     manager = ClientManager(clients_file_path=test_file_full_path)
     print(f"Test data file will be: {manager.clients_file_path}")
 
     if os.path.exists(manager.clients_file_path):
         os.remove(manager.clients_file_path)
         print(f"Cleared old test file: {manager.clients_file_path}")
-    # Re-instantiate manager to ensure it loads from the (now empty) test file
-    # and resets its internal state like _next_id.
     manager = ClientManager(clients_file_path=test_file_full_path)
+
 
     print(f"\nInitial clients loaded: {len(manager.get_all_clients())}")
 
     print("\n1. Adding new clients...")
     client1_data = {
-        "name": "Dave Lister", "address_line_1": "JMC Red Dwarf",
+        "name": "Dave Lister", "address_line_1": "JMC Red Dwarf, Bunk 3",
         "city": "Deep Space", "state": "N/A", "zip_code": "00000",
-        "country": "Jupiter Mining Corporation", "phone_number": "555-RDWARF",
+        "country": "Jupiter Mining Corp", "phone_number": "555-RDWARF",
         "address_line_2": "Sleeping Quarters"
     }
     client2_data = {
-        "name": "Arnold Rimmer", "address_line_1": "Hologram Suite",
+        "name": "Arnold Rimmer", "address_line_1": "Hologram Suite 7",
         "city": "Red Dwarf", "state": "N/A", "zip_code": "00001",
-        "country": "Jupiter Mining Corporation", "phone_number": "555-SMEGHEAD",
+        "country": "Jupiter Mining Corp", "phone_number": "555-SMEGHEAD",
         "address_line_3": "Light Bee Powered"
     }
+    client3_data = {
+        "name": "Kristine Kochanski", "address_line_1": "Officer Quarters",
+        "city": "Red Dwarf", "state": "N/A", "zip_code": "00002",
+        "country": "Jupiter Mining Corp", "phone_number": "555-NAVIGATION"
+    }
+
 
     dave = manager.add_client(client1_data)
     arnold = manager.add_client(client2_data)
+    kristine = manager.add_client(client3_data)
 
     if dave:
         print(f"Added: {dave.name} with ID {dave.client_id}")
     if arnold:
         print(f"Added: {arnold.name} with ID {arnold.client_id}")
+    if kristine:
+        print(f"Added: {kristine.name} with ID {kristine.client_id}")
+
 
     print(f"\nTotal clients now: {len(manager.get_all_clients())}")
 
@@ -380,14 +450,54 @@ if __name__ == "__main__":
         DELETED_CLIENT_FLAG = manager.delete_client(dave.client_id)
         print(f"Dave (ID: {dave.client_id}) deleted: {DELETED_CLIENT_FLAG}")
 
+    print("\n6. Searching clients (New Tests)...")
+    print("\n  Searching for name containing 'rimm' (case-insensitive):")
+    rimmer_search_alias = manager.search({"name": "rimm"})
+    for found_client_obj in rimmer_search_alias:
+        print(f"    Found via alias: {found_client_obj.name} (ID: {found_client_obj.client_id})")
+
+
+    print("\n  Searching for country 'Jupiter Mining Corp' and city 'Red Dwarf':")
+    red_dwarf_search = manager.find_clients(
+        {"country": "Jupiter Mining Corp", "city": "Red Dwarf"}
+    )
+    for found_client_obj_2 in red_dwarf_search:
+        print(f"    Found: {found_client_obj_2.name}, City: {found_client_obj_2.city}, "
+              f"Country: {found_client_obj_2.country}")
+
+    print("\n  Searching for non-existent name 'Zaphod':")
+    zaphod_search = manager.find_clients({"name": "Zaphod"})
+    if not zaphod_search:
+        print("    Correctly found no clients named 'Zaphod'.")
+
+    print("\n  Searching by client_id=2 (exact match):")
+    # Renamed 'test_id_to_search_for' to 'TEST_ID_TO_SEARCH_FOR' to conform to C0103
+    TEST_ID_TO_SEARCH_FOR = 2
+    id_search_results = []
+    if arnold and arnold.client_id == 2:
+        id_search_results = manager.find_clients({"client_id": 2})
+    elif kristine and kristine.client_id == 2:
+        id_search_results = manager.find_clients({"client_id": 2})
+        TEST_ID_TO_SEARCH_FOR = kristine.client_id # Update if Kristine is ID 2
+    else:
+        client_with_id_2 = manager.get_client_by_id(2)
+        if client_with_id_2:
+            print(f"    Note: Client with ID 2 is actually {client_with_id_2.name}")
+            id_search_results = [client_with_id_2]
+        else:
+            print("    Note: No client currently has ID 2 for exact match test.")
+
+
+    if id_search_results:
+        for found_client_obj_3 in id_search_results:
+            print(f"    Found by ID ({TEST_ID_TO_SEARCH_FOR}): {found_client_obj_3.name}")
+    else:
+        print(f"    No client found with ID {TEST_ID_TO_SEARCH_FOR} for exact match test.")
+
+
     print("\nFinal list of clients:")
     for c_obj_final_loop_var in manager.get_all_clients():
         print(f"  {c_obj_final_loop_var}")
 
     print(f"\nTotal clients at end: {len(manager.get_all_clients())}")
     print(f"Check the file: {manager.clients_file_path}")
-    # To properly clean up, you might want to delete the TEST_DATA_ROOT_TEMP_DIR folder
-    # import shutil
-    # if os.path.exists(TEST_DATA_ROOT_TEMP_DIR):
-    #     shutil.rmtree(TEST_DATA_ROOT_TEMP_DIR)
-    #     print(f"Cleaned up test directory: {TEST_DATA_ROOT_TEMP_DIR}")
