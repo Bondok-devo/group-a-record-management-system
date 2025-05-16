@@ -1,8 +1,19 @@
-temp_test_output/
+# Virtual Environments
+.venv/
+venv/
+env/
+venv_py312/
+
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+
+# OS-specific files
 .DS_Store
-venv/
-env/
-*.env
+Thumbs.db
+
+# IDE / Editor specific
+.vscode/
+# Add other editor/IDE specific folders if needed
