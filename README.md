@@ -219,3 +219,73 @@ Follow these instructions to set up the project locally and run the application.
     * **Code Quality:** `Pylint` is recommended for checking code quality.
 
 ---
+## Running Unit Tests:
+
+This project uses [pytest](https://docs.pytest.org/) for unit testing. The main test file is typically located at `src/tests/unit_test.py`.
+
+### Prerequisites for Running Tests
+
+* **Project Setup Completed:** Ensure you have already followed the "Getting Started" section to:
+    * Install Python 3.12.x.
+    * Clone the repository into your project directory (e.g., `group-a-record-management-system`).
+    * Create and activate the virtual environment (`.venv`).
+    * Install all project dependencies from `requirements.txt` by running `pip install -r requirements.txt` in the activated virtual environment. This file should include `pytest` and `pytest-cov` if you intend to use test coverage features.
+
+* **Virtual Environment Activated:** Before running tests, always ensure your project's virtual environment is activated. If you need to reactivate it:
+    * **Windows (Command Prompt/PowerShell):**
+        ```bash
+        .\.venv\Scripts\activate
+        ```
+        (If using PowerShell and you encounter an error, you might need to run `Set-ExecutionPolicy Unrestricted -Scope Process` first, then try activating again.)
+    * **macOS/Linux (bash/zsh):**
+        ```bash
+        source .venv/bin/activate
+        ```
+    Your terminal prompt should now indicate that the virtual environment is active (e.g., `(.venv) ...`). *(Refer to step 2 in "Getting Started" for more details if needed.)*
+
+### Running Tests
+
+Follow these steps to run the unit tests:
+
+1.  **Open your terminal or command prompt.**
+2.  **Navigate to the root directory of the project.** This is the top-level folder of your project (e.g., `group-a-record-management-system`), where your `src` folder and `requirements.txt` file are located.
+    * Example (replace `/path/to/your/project_directory_name` with the actual path):
+        ```bash
+        cd /path/to/your/project_directory_name
+        ```
+3.  **Ensure your virtual environment is active** (as described in the "Prerequisites for Running Tests" section above).
+4.  **Run the tests:**
+    * Execute the following command from the project root:
+        ```bash
+        pytest
+        ```
+    * `pytest` will automatically discover and run test files (e.g., `test_*.py` or `*_test.py` like `unit_test.py`) within the project, including those in `src/tests/`.
+
+**For more detailed output (verbosity):**
+
+* To see more details about which tests are running and their status:
+    ```bash
+    pytest -v
+    ```
+
+### Test Coverage (Optional)
+
+Test coverage measures how much of your codebase is exercised by your tests. If `pytest-cov` is installed (expected to be in `requirements.txt` for this feature):
+
+1.  **Ensure you are in the project root directory** in your terminal.
+2.  **Ensure your virtual environment is active.**
+3.  **Run the coverage command:**
+    * This command will run your tests and report on the coverage for the code within the `src` directory:
+        ```bash
+        pytest --cov=src
+        ```
+    * The `--cov=src` part tells `pytest-cov` to measure coverage for the `src` directory. You should see a report in your terminal.
+
+4.  **Generating an HTML coverage report (more detailed view):**
+    * For a more interactive report, you can generate it in HTML format:
+        ```bash
+        pytest --cov=src --cov-report=html
+        ```
+    * This will create an `htmlcov` directory in your project root. Open the `index.html` file within `htmlcov` in a web browser to explore the coverage details.
+
+---

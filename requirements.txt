@@ -9,6 +9,10 @@ python-dotenv
 # For the DateEntry widget used in the GUI
 tkcalendar
 
+# For the Unit testing
+pytest
+pytest-cov
+
 # Add any other external packages required by the project below.
 
 # To update this file with all packages currently in your virtual environment
