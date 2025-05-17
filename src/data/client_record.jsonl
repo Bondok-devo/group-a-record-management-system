@@ -1,0 +1,4 @@
+{"client_id": 1, "record_type": "Client", "name": "John Smith", "address_line_1": "12 1st street", "address_line_2": "AAA", "address_line_3": "BBB", "city": "CCC", "state": "DDD", "zip_code": "2000", "country": "UK", "phone_number": "123 4567"}
+{"client_id": 2, "record_type": "Client", "name": "John Doe", "address_line_1": "fds", "address_line_2": "dssd", "address_line_3": "gs ", "city": "dsfsd ", "state": "sdfsdf", "zip_code": "sdfds", "country": "sdfsdf", "phone_number": "fdssd"}
+{"client_id": 3, "record_type": "Client", "name": "Jane Doe", "address_line_1": "123", "address_line_2": "456", "address_line_3": "789", "city": "xyz", "state": "asd", "zip_code": "1000", "country": "ESP", "phone_number": "01010101010"}
+{"client_id": 4, "record_type": "Client", "name": "Jane Smith", "address_line_1": "12A 1st street", "address_line_2": "AAA", "address_line_3": "BBB", "city": "CCC", "state": "DDD", "zip_code": "2000", "country": "UK", "phone_number": "123 4567"}
