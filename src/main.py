@@ -3,16 +3,25 @@
 Main application file for the Travel Agent Record Management System.
 
 This script serves as the entry point for the application. It initializes
-the core components, such as data managers using settings from a
-configuration file, and launches the Graphical User Interface (GUI).
+the core components, such as data managers using settings from
+environment variables (via .env file) or hardcoded defaults,
+and launches the Graphical User Interface (GUI).
 """
 
+# Standard library imports should come first, grouped together.
 import sys
 import os # Required for path manipulation
 from datetime import datetime # Used in the demonstration function
 import tkinter as tk
-# Original import for TravelApp, moved below path setup.
-# from src.gui.gui import TravelApp
+
+# Third-party imports come next.
+# Ensure you have 'python-dotenv' installed: pip install python-dotenv
+from dotenv import load_dotenv
+
+# --- Load environment variables from .env file ---
+# This should be done as early as possible, after imports.
+load_dotenv() # Looks for a .env file in the current directory or parent directories
+
 
 # --- Path Setup ---
 # Modifying sys.path to ensure 'src' can be imported as a top-level package
@@ -23,16 +32,13 @@ project_root_dir = os.path.dirname(current_script_dir) # expected: /path/to/GROU
 if project_root_dir not in sys.path:
     sys.path.insert(0, project_root_dir)
 
+# Local application/library specific imports
 try:
-    # Import the GUI class
     from src.gui.gui import TravelApp
-
-    # Import the manager classes for each record type using the 'src' prefix
     from src.record.client_manager import ClientManager
     from src.record.airline_manager import AirlineManager
     from src.record.flight_manager import FlightManager
-    # Import the configuration loader using the 'src' prefix
-    from src.conf import config_loader # Assumes __init__.py in src/conf/
+    from src.conf import config_loader # This now uses .env and defaults
 except ImportError as import_error:
     print(f"Fatal Error: Could not import necessary modules: {import_error}")
     print("Troubleshooting tips:")
@@ -43,18 +49,17 @@ except ImportError as import_error:
     print(f"Current sys.path: {sys.path}")
     sys.exit(1) # Exit if core components can't be loaded.
 
-def initialize_managers(app_config):
+def initialize_managers(): # Removed app_config argument
     """
-    Creates and returns instances of all data managers, using paths from config.
-
-    Args:
-        app_config (configparser.ConfigParser): The loaded application configuration.
+    Creates and returns instances of all data managers, using paths
+    derived from environment variables or defaults.
     """
     print("Initializing data managers...")
-    # Get specific file paths from the loaded configuration
-    client_file = config_loader.get_client_data_file(app_config)
-    airline_file = config_loader.get_airline_data_file(app_config)
-    flight_file = config_loader.get_flight_data_file(app_config)
+    # Get specific file paths. These functions in config_loader now
+    # prioritize environment variables and then defaults.
+    client_file = config_loader.get_client_data_file()
+    airline_file = config_loader.get_airline_data_file()
+    flight_file = config_loader.get_flight_data_file()
 
     print(f"Using Client data file: '{client_file}'")
     print(f"Using Airline data file: '{airline_file}'")
@@ -90,7 +95,7 @@ def demonstrate_manager_interactions(client_mgr, airline_mgr, flight_mgr):
     Performs basic operations using the data managers for demonstration.
 
     This function interacts with the managers initialized with paths from
-    config.ini, affecting the actual data files specified there.
+    environment variables or defaults, affecting the actual data files specified.
     Includes cleanup of created test data. Use only for testing/demo purposes.
     """
     print("\n--- Demonstrating Manager Interactions (using configured paths) ---")
@@ -197,15 +202,18 @@ def main():
     """
     print("Starting Travel Agent Record Management System...")
 
-    # Load application configuration from src/conf/config.ini
-    app_config = config_loader.load_configuration()
-    if not app_config.sections():
-        print("Critical: Configuration could not be loaded or is empty. "
-              "Application may not function correctly or use default paths.")
+    # config.ini is no longer loaded here for path resolution.
+    # config_loader.py now handles path resolution using environment variables and defaults.
+    # The app_config object is no longer needed for path resolution.
+    # If config.ini was used for other settings, that would need separate handling.
+    # app_config = config_loader.load_configuration() # This line is removed
+    # if not app_config.sections(): # This check is removed
+    #     print("Critical: Configuration could not be loaded or is empty. "
+    #           "Application may not function correctly or use default paths.")
         # Consider exiting if config is essential: sys.exit(1)
 
-    # Initialize all the data managers using the loaded configuration
-    client_mgr, airline_mgr, flight_mgr = initialize_managers(app_config)
+    # Initialize all the data managers
+    client_mgr, airline_mgr, flight_mgr = initialize_managers() # No app_config needed
 
     # Uncomment the line below to run the demonstration of manager interactions.
     # Note: This affects the actual data files specified in config.ini.
