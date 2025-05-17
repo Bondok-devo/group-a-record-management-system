@@ -72,15 +72,18 @@ If you don't have Python 3.12 installed, follow these instructions for your oper
 
 Follow these instructions to set up the project locally and run the application.
 
-**1. Clone the Repository:**
+1.  **Clone the Repository:**
+
     Open your terminal or command prompt and run:
     ```bash
     git clone [https://github.com/Bondok-devo/group-a-record-management-system.git](https://github.com/Bondok-devo/group-a-record-management-system.git)
     cd group-a-record-management-system
     ```
 
-**2. Create and Activate a Virtual Environment:**
+2.  **Create and Activate a Virtual Environment:**
+
     Using a virtual environment is crucial for managing project dependencies in isolation. We'll name it `.venv`.
+
     * **Navigate to the project root directory (`group-a-record-management-system`):**
         * Ensure you are in the cloned project directory.
     * **Create the virtual environment using your Python 3.12 interpreter:**
@@ -103,14 +106,17 @@ Follow these instructions to set up the project locally and run the application.
             ```
     Your terminal prompt should change to indicate that the virtual environment is active (e.g., `(.venv) ...`).
 
-**3. Install Dependencies:**
+3.  **Install Dependencies:**
+
     With the virtual environment activated, install the required Python packages listed in `requirements.txt`:
     ```bash
     pip install -r requirements.txt
     ```
 
-**4. Configure VS Code Python Interpreter (Important for Running from VS Code):**
+4.  **Configure VS Code Python Interpreter (Important for Running from VS Code):**
+
     To ensure VS Code uses the Python interpreter from your virtual environment (which has the necessary packages like `python-dotenv` installed):
+
     * **Open your `group-a-record-management-system` folder in VS Code.**
     * **Open the Command Palette:**
         * Menu: **View > Command Palette…**
@@ -123,7 +129,8 @@ Follow these instructions to set up the project locally and run the application.
     * **If your `.venv` interpreter is not listed, you can choose "Enter interpreter path..." and manually browse to `.venv/bin/python` (or `.venv\Scripts\python.exe` on Windows) within your project folder.**
     * **After selecting, check the bottom-left corner of the VS Code status bar. It should now display the Python version followed by `('.venv')` or the path to your virtual environment's interpreter.**
 
-**5. Environment Configuration (`.env` file):**
+5.  **Environment Configuration (`.env` file):**
+
     This application uses an `.env` file located in the project root directory to define the paths for data storage files. A default `.env` file is included in this repository.
 
     The default `.env` file (e.g., `group-a-record-management-system/.env`) specifies paths like:
@@ -140,12 +147,14 @@ Follow these instructions to set up the project locally and run the application.
 
     Data Format: The application expects data files to be in JSONL format (one JSON object per line).
 
-**6. Ensure Data Directory and Files Exist (Initial Run):**
+6.  **Ensure Data Directory and Files Exist (Initial Run):**
+
     Based on the default paths in the `.env` file, ensure the `src/data/` directory exists within your project structure.
 
     If the data files (`client_record.jsonl`, etc.) do not exist upon first run, the ClientManager (and presumably other managers) are designed to handle this gracefully, typically by starting with an empty set of records and creating the files upon the first save operation.
 
-**7. Running the Application:**
+7.  **Running the Application:**
+
     There are two primary ways to run the application:
 
     * **Method 1: From the Terminal (Recommended for initial setup verification)**
@@ -166,7 +175,8 @@ Follow these instructions to set up the project locally and run the application.
 
     The application GUI should launch.
 
-**8. Project Structure:**
+8.  **Project Structure:**
+
     A brief overview of the project's directory layout:
     ```text
     group-a-record-management-system/
@@ -198,7 +208,8 @@ Follow these instructions to set up the project locally and run the application.
     └── .venv/                    # Virtual environment directory (should be in .gitignore)
     ```
 
-**9. Development:**
+9.  **Development:**
+
     * **Virtual Environment:** Always activate your virtual environment (`source .venv/bin/activate` or equivalent) before running the application or installing new packages.
     * **Dependencies:** If you add new dependencies to the project, update the `requirements.txt` file:
         ```bash
