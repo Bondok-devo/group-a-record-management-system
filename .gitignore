@@ -18,3 +18,4 @@ Thumbs.db
 .vscode/
 # Add other editor/IDE specific folders if needed
 temp_test_output/
+tests/

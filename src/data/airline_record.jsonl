@@ -1,1 +1,4 @@
-{"airline_id": 1, "record_type": "airline", "company_name": "American Airlines"}
+{"airline_id": 1, "record_type": "Airline", "company_name": "RyanAir"}
+{"airline_id": 2, "record_type": "Airline", "company_name": "American_Airlines"}
+{"airline_id": 4, "record_type": "Airline", "company_name": "British Airways"}
+{"airline_id": 5, "record_type": "Airline", "company_name": "Lufthansa"}

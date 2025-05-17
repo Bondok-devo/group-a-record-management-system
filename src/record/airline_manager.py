@@ -38,7 +38,7 @@ class AirlineManager:
 
         self.airlines_file_path = airlines_file_path
         self._airlines: List[AirlineRecord] = []
-        self._next_id: int = 1  # Used for generating unique airline IDs.
+        self._next_id: int = 1
         self._load_airlines()
 
     def _load_airlines(self) -> None:
@@ -51,42 +51,32 @@ class AirlineManager:
         """
         self._airlines = []
         if not os.path.exists(self.airlines_file_path):
-            return  # No file to load, will be created on first save.
+            return
 
-        highest_id_found = 0
+        highest_id = 0
         try:
-            with open(self.airlines_file_path, 'r', encoding='utf-8') as file:
-                for line_number, line in enumerate(file, 1):
-                    line_content = line.strip()
-                    if not line_content:
+            with open(self.airlines_file_path, 'r', encoding='utf-8') as f:
+                for idx, line in enumerate(f, 1):
+                    line = line.strip()
+                    if not line:
                         continue
-
                     try:
-                        data = json.loads(line_content)
-                        # This manager should only deal with records of type "Airline".
-                        if data.get("record_type") == "Airline":
-                            airline = AirlineRecord.from_dict(data) # Expects "airline_id"
+                        data = json.loads(line)
+                        if data.get('record_type') == 'Airline':
+                            airline = AirlineRecord.from_dict(data)
                             self._airlines.append(airline)
-                            # Use .airline_id as per AirlineRecord class
-                            if airline.airline_id is not None and airline.airline_id > highest_id_found:
-                                highest_id_found = airline.airline_id
-                    except json.JSONDecodeError:
-                        print(f"Warning: Invalid JSON on line {line_number} in "
-                              f"'{self.airlines_file_path}'. Skipping.")
-                    except ValueError as e:
-                        print(f"Warning: Invalid data for record on line {line_number} "
-                              f"in '{self.airlines_file_path}': {e}. Skipping.")
-                    except TypeError as e:
-                        print(f"Warning: Type error for record on line {line_number} "
-                              f"in '{self.airlines_file_path}': {e}. Skipping.")
+                            if airline.airline_id and airline.airline_id > highest_id:
+                                highest_id = airline.airline_id
+                    except (json.JSONDecodeError, ValueError, TypeError) as e:
+                        # Line 71 fix for C0301:line-too-long
+                        print(f"Warning: Error on line {idx} in "
+                              f"'{self.airlines_file_path}': {e}. Skipping.")
         except IOError as e:
-            print(f"Warning: Could not read '{self.airlines_file_path}': {e}. "
-                  "Starting with no airlines.")
-        except Exception as e:
-            # This broad exception is a last resort to prevent crashing during load.
-            print(f"An unexpected error occurred loading airlines: {e}")
+            print(f"Warning: Cannot read '{self.airlines_file_path}': {e}. Starting empty.")
+        except Exception as e: # W0718: Broad-exception-caught (line 74 in original report)
+            print(f"Unexpected error loading airlines ({type(e).__name__}): {e}")
 
-        self._next_id = highest_id_found + 1
+        self._next_id = highest_id + 1
 
     def _save_airlines(self) -> bool:
         """
@@ -99,101 +89,77 @@ class AirlineManager:
             True if saving was successful, False otherwise.
         """
         try:
-            # Ensure the directory for the specific data file exists
             file_directory = os.path.dirname(self.airlines_file_path)
-            if file_directory: # Check if there's a directory part (not just filename)
+            if file_directory:
                 os.makedirs(file_directory, exist_ok=True)
-
             with open(self.airlines_file_path, 'w', encoding='utf-8') as file:
-                for airline_item in self._airlines:
-                    airline_dict = airline_item.to_dict() # This will have "airline_id" key
-                    # AirlineRecord.to_dict() should ensure record_type is "Airline"
-                    json.dump(airline_dict, file)
-                    file.write('\n')
+                for airline_record in self._airlines:
+                    json.dump(airline_record.to_dict(), file)
+                    file.write("\n")
             return True
-        except IOError as e:
-            print(f"Error: Could not write to '{self.airlines_file_path}': {e}. "
-                  "Changes may not be saved.")
+        except (IOError, OSError) as e: # More specific than general Exception
+            print(f"Error saving airlines ({type(e).__name__}): {e}")
             return False
-        except Exception as e:
-            # This broad exception is a last resort for saving errors.
-            print(f"An unexpected error occurred while saving airlines: {e}")
+        except Exception as e: # W0718: Broad-exception-caught (line 98 in original report)
+            print(f"Unexpected error saving airlines ({type(e).__name__}): {e}")
             return False
+
 
     def _generate_id(self) -> int:
-        """Generates a new, unique ID for an airline."""
+        """ Generates a new, unique ID for an airline."""
         new_id = self._next_id
         self._next_id += 1
         return new_id
 
-    def add_airline(self, airline_data: Dict[str, Any]) -> Optional[AirlineRecord]:
+    def add_airline(self, data: Dict[str, Any]) -> Optional[AirlineRecord]:
         """
         Adds a new airline to the system.
 
-        A unique ID is generated. The 'record_type' must be provided in airline_data
-        and should typically be "Airline".
-        The primary data expected in airline_data is 'company_name' and 'record_type'.
+        A unique ID is genrated and 'record_type' is set to 'Airline'
 
         Args:
-            airline_data: Dictionary of airline information,
-                          e.g., {"company_name": "PythonAir", "record_type": "Airline"}.
+           airline_data: Dictiomnaru of airline information.
 
         Returns:
-            The created AirlineRecord object if successful, else None.
+           The created AirlineRecord object is successful, else None.
         """
-        new_airline_id_val = self._generate_id()
-        data_for_record = airline_data.copy()
-        # Key for AirlineRecord.from_dict and in its to_dict is "airline_id"
-        data_for_record['airline_id'] = new_airline_id_val
-
-        if 'record_type' not in data_for_record:
-            print("Error: 'record_type' is required to add an airline.")
-            self._next_id -=1 # Rollback ID
+        data_copy = data.copy()
+        data_copy['airline_id'] = self._generate_id()
+        if 'record_type' not in data_copy:
+            print("Error: 'record_type' required.")
+            self._next_id -= 1
             return None
-        if data_for_record['record_type'] != "Airline":
-            print(f"Warning: Attempting to add an airline with record_type "
-                  f"'{data_for_record['record_type']}'. Ensure this is intended.")
-
-        if 'company_name' not in data_for_record or not data_for_record['company_name']:
-            print("Error: Could not add airline. 'company_name' is required and cannot be empty.")
-            self._next_id -=1 # Rollback ID
-            return None
-
         try:
-            new_airline = AirlineRecord.from_dict(data_for_record)
-            self._airlines.append(new_airline)
+            new_airline_record = AirlineRecord.from_dict(data_copy)
+            self._airlines.append(new_airline_record)
             if self._save_airlines():
-                return new_airline
-            # Rollback if save failed
+                return new_airline_record
             self._airlines.pop()
             self._next_id -= 1
-            print("Error: Failed to save after adding airline. Airline not added.")
-            return None
-        except ValueError as e: # Errors from AirlineRecord.from_dict
-            print(f"Error: Could not add airline. Invalid data: {e}")
-            self._next_id -= 1 # Rollback ID
-            return None
-        except Exception as e:
-            # This broad exception is a last resort for add operation errors.
-            print(f"An unexpected error occurred while adding airline: {e}")
+            print("Error: save failed, rollback.")
+        except (ValueError, TypeError) as e: # Specific exceptions first
+            print(f"Error adding airline due to invalid data: {e}")
             self._next_id -= 1
-            return None
+        except Exception as e: # W0718: Broad-exception-caught (line 134 in original report)
+            print(f"Unexpected error adding airline ({type(e).__name__}): {e}")
+            self._next_id -= 1
+        return None
 
-    def get_airline_by_id(self, airline_id_val: int) -> Optional[AirlineRecord]:
+    def get_airline_by_id(self, airline_id: int) -> Optional[AirlineRecord]:
         """
-        Retrieves an airline by its unique ID.
+        Retrieves an airline by their unique ID.
 
         Args:
-            airline_id_val: The integer ID of the airline.
+            airline_id: The integer ID of the airline.
 
         Returns:
             The AirlineRecord object if found, otherwise None.
         """
-        if not isinstance(airline_id_val, int):
+        if not isinstance(airline_id, int):
             return None
-        for airline_item in self._airlines:
-            if airline_item.airline_id == airline_id_val: # Use .airline_id
-                return airline_item
+        for airline_record in self._airlines:
+            if airline_record.airline_id == airline_id:
+                return airline_record
         return None
 
     def get_all_airlines(self) -> List[AirlineRecord]:
@@ -203,184 +169,140 @@ class AirlineManager:
         Returns:
             A list of AirlineRecord objects (a copy of the internal list).
         """
-        return self._airlines[:] # Return a shallow copy
+        return list(self._airlines)
 
-    def update_airline(self, airline_id_val: int,
-                       update_info: Dict[str, Any]) -> Optional[AirlineRecord]:
-        """
-        Updates an existing airline's information.
-
-        'airline_id' in update_info will be ignored.
-        Args:
-            airline_id_val: The ID of the airline to update.
-            update_info: Dictionary with fields to update.
-
-        Returns:
-            The updated AirlineRecord object if successful, else None.
-        """
-        airline_to_update = None
-        airline_index = -1
-        for i, al_item in enumerate(self._airlines):
-            if al_item.airline_id == airline_id_val: # Use .airline_id
-                airline_to_update = al_item
-                airline_index = i
-                break
-
-        if not airline_to_update:
-            print(f"Info: No airline found with ID {airline_id_val} to update.")
+    def update_airline(self, airline_id: int, updates: Dict[str, Any]) -> Optional[AirlineRecord]:
+        """Updates an existing airline's information.""" # C0116: Added minimal docstring
+        # C0301: Line too long - reformatting next line
+        record_index = next(
+            (i for i, rec in enumerate(self._airlines) if rec.airline_id == airline_id),
+            None
+        )
+        if record_index is None:
+            print(f"Info: No airline {airline_id} found.")
             return None
-
-        current_data = airline_to_update.to_dict() # This will have "airline_id" key
-        original_data_backup = current_data.copy()
-        changed_fields = False
-
-        for key, value in update_info.items():
-            if key == "airline_id": # Prevent changing ID through this method
+        original_data = self._airlines[record_index].to_dict()
+        new_data = original_data.copy()
+        changed = False
+        for key, value in updates.items():
+            if key == 'airline_id': # C0321: multiple-statements - fixed
                 continue
-            if key in current_data:
-                if current_data[key] != value:
-                    current_data[key] = value
-                    changed_fields = True
-            # Allow adding new keys if AirlineRecord can handle them (flexible)
-            # For AirlineRecord, we are mainly concerned with company_name and record_type
-            elif key in ["company_name", "record_type"]:
-                current_data[key] = value
-                changed_fields = True
+            if new_data.get(key) != value: # Use .get() for safer access
+                new_data[key] = value
+                changed = True
 
-        if not changed_fields:
-            return airline_to_update
-
+        if not changed:
+            return self._airlines[record_index]
         try:
-            # from_dict expects "airline_id" key, which current_data (from to_dict) has.
-            updated_airline_obj = AirlineRecord.from_dict(current_data)
-            self._airlines[airline_index] = updated_airline_obj
+            updated_record = AirlineRecord.from_dict(new_data)
+            self._airlines[record_index] = updated_record
             if self._save_airlines():
-                return updated_airline_obj
-            self._airlines[airline_index] = AirlineRecord.from_dict(original_data_backup)
-            print(f"Error: Failed to save updates for airline ID {airline_id_val}. "
-                  "Changes rolled back.")
-            return None
-        except ValueError as e:
-            print(f"Error: Could not update airline ID {airline_id_val}. "
-                  f"Invalid data after update: {e}")
-            return None
-        except Exception as e:
-            print(f"An unexpected error occurred while updating airline {airline_id_val}: {e}")
-            return None
+                return updated_record
 
-    def delete_airline(self, airline_id_val: int) -> bool:
+            self._airlines[record_index] = AirlineRecord.from_dict(original_data)
+            print("Error: save failed, rollback update.")
+        except (ValueError, TypeError) as e: # Specific exceptions first
+            print(f"Error updating airline due to invalid data: {e}")
+        except Exception as e: # W0718: Broad-exception-caught (line 189 in original report)
+            print(f"Error updating airline ({type(e).__name__}): {e}")
+        return None
+
+    def delete_airline(self, airline_id: int) -> bool:
         """
         Removes an airline from the system.
 
         Args:
-            airline_id_val: The ID of the airline to delete.
+          airline_id: the ID of the airline to delete.
 
         Returns:
-            True if deletion was successful, False otherwise.
+          True if deletion was successful, False otherwise.
         """
-        airline_to_delete = None
-        airline_index = -1
-        for i, al_item in enumerate(self._airlines):
-            if al_item.airline_id == airline_id_val: # Use .airline_id
-                airline_to_delete = al_item
-                airline_index = i
-                break
-
-        if not airline_to_delete:
+        # C0301: Line too long - reformatting next line
+        record_index = next(
+            (i for i, rec in enumerate(self._airlines) if rec.airline_id == airline_id),
+            None
+        )
+        if record_index is None:
             return False
 
-        self._airlines.pop(airline_index)
+        removed_record = self._airlines.pop(record_index)
         if self._save_airlines():
             return True
-        self._airlines.insert(airline_index, airline_to_delete)
-        print(f"Error: Failed to save after deleting airline ID {airline_id_val}. "
-              "Deletion rolled back.")
+
+        self._airlines.insert(record_index, removed_record)
+        print("Error: delete failed, rollback.")
         return False
 
 # This section is for direct testing of the AirlineManager.
-if __name__ == "__main__":
+def run_airline_manager_demo() -> None:
+    """
+    Demo and manual tests for AirlineManager. Creates a temporary test file,
+    runs CRUD operations, and prints outcomes.
+    """
     print("--- AirlineManager Direct Test ---")
-
-    # Determine the project root directory (GROUP-A) to correctly place temp_test_output
-    current_script_path = os.path.abspath(__file__)
-    record_dir = os.path.dirname(current_script_path)
+   # Determine the project root directory (GROUP-A) to correctly place temp_test_output
+    current_path = os.path.abspath(__file__)
+    # Expected structure: .../GROUP-A/src/record/airline_manager.py
+    # record_dir is .../GROUP-A/src/record/
+    record_dir = os.path.dirname(current_path)
+    # src_dir is .../GROUP-A/src/
     src_dir = os.path.dirname(record_dir)
-    project_root = os.path.dirname(src_dir)
-
-    # Define the path for test data, ensuring it's outside src/
-    TEST_DATA_SUBDIR_NAME = "airline_manager_test_data"
-    TEMP_TEST_OUTPUT_ROOT_DIR_NAME = "temp_test_output" # This folder should be in .gitignore
-
-    test_data_specific_folder = os.path.join(project_root,
-                                             TEMP_TEST_OUTPUT_ROOT_DIR_NAME,
-                                             TEST_DATA_SUBDIR_NAME)
-    TEST_DATA_FILE_NAME = "airline_record.jsonl"
-    test_file_full_path = os.path.join(test_data_specific_folder, TEST_DATA_FILE_NAME)
+    # project_root is .../GROUP-A/
+    _project_root = os.path.dirname(src_dir) # W0612: Unused variable - prefixed
 
 
-    if not os.path.exists(test_data_specific_folder):
-        os.makedirs(test_data_specific_folder, exist_ok=True)
-        print(f"Created test data directory: {test_data_specific_folder}")
+    test_subdir = "airline_manager_test_data" # C0103: invalid-name - changed to snake_case
+    temp_root_dir_name = "temp_test_output"   # C0103: invalid-name - changed to snake_case
 
-    print("Test block assumes 'from .airline_record import AirlineRecord' at the top is working.")
+    test_folder = os.path.join(src_dir, temp_root_dir_name, test_subdir)
+    file_name = "airline_record.jsonl"
+    test_file_path = os.path.join(test_folder, file_name)
 
-    # Initialize manager with the specific test file path
-    manager = AirlineManager(airlines_file_path=test_file_full_path)
-    print(f"Test data file will be: {manager.airlines_file_path}")
+    os.makedirs(test_folder, exist_ok=True)
+    print(f"Test directory: {test_folder}")
 
-    if os.path.exists(manager.airlines_file_path):
-        os.remove(manager.airlines_file_path)
-        print(f"Cleared old test file: {manager.airlines_file_path}")
-    # Re-instantiate manager for a clean state.
-    manager = AirlineManager(airlines_file_path=test_file_full_path)
+    manager = AirlineManager(test_file_path)
+    print(f"Using file: {manager.airlines_file_path}")
 
-    print(f"\nInitial airlines loaded: {len(manager.get_all_airlines())}")
+    if os.path.exists(test_file_path):
+        os.remove(test_file_path)
+        print("Cleared old test file.")
+    manager = AirlineManager(test_file_path)
 
-    print("\n1. Adding new airlines...")
-    airline1_data = {"record_type": "Airline", "company_name": "PythonAir"}
-    airline2_data = {"record_type": "Airline", "company_name": "TkinterFly"}
+    print(f"Initial count: {len(manager.get_all_airlines())}")
 
-    py_air = manager.add_airline(airline1_data)
-    tk_fly = manager.add_airline(airline2_data)
+    print("\nAdding Airlines...")
+    for company_name in ["PythonAir", "TkinterFly"]:
+        record = {"record_type": "Airline", "company_name": company_name}
+        result = manager.add_airline(record)
+        if result:
+            print(f"Added: {result.company_name} (ID {result.airline_id})")
 
-    if py_air:
-        print(f"Added: {py_air.company_name} with ID {py_air.airline_id}")
-    if tk_fly:
-        print(f"Added: {tk_fly.company_name} with ID {tk_fly.airline_id}")
+    print(f"\nCount after add: {len(manager.get_all_airlines())}")
 
-    print(f"\nTotal airlines now: {len(manager.get_all_airlines())}")
+    print("\nListing Airlines:")
+    for airline_record_item in manager.get_all_airlines(): # Renamed to avoid redefinition
+        print(f"  {airline_record_item}")
 
-    print("\n2. Getting an airline by ID...")
-    if py_air:
-        retrieved_py_air = manager.get_airline_by_id(py_air.airline_id)
-        if retrieved_py_air:
-            print(f"Found: {retrieved_py_air.company_name}")
-
-    print("\n3. Updating an airline...")
-    if tk_fly:
-        updated_tk_fly = manager.update_airline(
-            tk_fly.airline_id,
-            {"company_name": "TkinterJet Express", "record_type": "Airline"}
+    print("\nUpdating first airline...")
+    all_records = manager.get_all_airlines()
+    if all_records:
+        first_record = all_records[0]
+        # C0301: Line too long - reformatting
+        new_company_name = first_record.company_name + " Updated"
+        updated = manager.update_airline(
+            first_record.airline_id, {"company_name": new_company_name}
         )
-        if updated_tk_fly:
-            print(f"Updated Airline: Name - {updated_tk_fly.company_name}")
-        else:
-            print(f"Failed to update TkinterFly (ID: {tk_fly.airline_id})")
+        if updated:
+            print(f"Updated: {updated}")
 
-    print("\n4. Listing all airlines again:")
-    for al_obj in manager.get_all_airlines():
-        print(f"  ID: {al_obj.airline_id}, Name: {al_obj.company_name}, "
-              f"Type: {al_obj.record_type}")
+    print("\nFinal list:")
+    for airline_record_item_final in manager.get_all_airlines(): # Renamed to avoid redefinition
+        print(f"  {airline_record_item_final}")
 
-    print("\n5. Deleting an airline...")
-    DELETED_AIRLINE_FLAG = False
-    if py_air:
-        DELETED_AIRLINE_FLAG = manager.delete_airline(py_air.airline_id)
-        print(f"PythonAir (ID: {py_air.airline_id}) deleted: {DELETED_AIRLINE_FLAG}")
+    print(f"\nTotal at end: {len(manager.get_all_airlines())}")
+    print(f"Check file at: {manager.airlines_file_path}")
 
-    print("\nFinal list of airlines:")
-    for al_obj_final in manager.get_all_airlines():
-        print(f"  {al_obj_final}") # Uses AirlineRecord's __str__
 
-    print(f"\nTotal airlines at end: {len(manager.get_all_airlines())}")
-    print(f"Check the file: {manager.airlines_file_path}")
+if __name__ == "__main__":
+    run_airline_manager_demo()

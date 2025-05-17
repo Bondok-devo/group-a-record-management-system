@@ -6,6 +6,9 @@
 # For loading environment variables from the .env file
 python-dotenv
 
+# For the DateEntry widget used in the GUI
+tkcalendar
+
 # Add any other external packages required by the project below.
 
 # To update this file with all packages currently in your virtual environment
