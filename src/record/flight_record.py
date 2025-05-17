@@ -17,12 +17,12 @@ class FlightRecord:
     suitable for storage and retrieval.
     """
     def __init__(self,
-                 record_type: str,
                  client_id: int,    # Internal attribute name
                  airline_id: int,   # Internal attribute name
                  flight_date: datetime, # Internally a datetime object
                  start_city: str,
                  end_city: str,
+                 record_type: str = "flight" # Should consistently be "flight"
                  # Flight records don't have their own primary ID in the requirements,
                  # they are identified by their association and details.
                  ):

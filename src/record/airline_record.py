@@ -15,9 +15,10 @@ class AirlineRecord:
     which is useful for saving to files like JSON.
     """
     def __init__(self,
-                 record_type: str, # Type of record as per requirements
                  company_name: str,
-                 airline_id: Optional[int] = None): # Pylint friendly naming
+                 airline_id: Optional[int] = None,
+                 record_type: str = "airline" # Should consistently be "airline"
+                 ):
         """
         Initializes a new AirlineRecord.
 

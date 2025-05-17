@@ -1,0 +1,21 @@
+# requirements.txt
+# This file lists the Python packages that this project depends on.
+# To install these dependencies, activate your virtual environment and run:
+# pip install -r requirements.txt
+
+# For loading environment variables from the .env file
+python-dotenv
+
+# For the DateEntry widget used in the GUI
+tkcalendar
+
+# For the Unit testing
+pytest
+pytest-cov
+
+# Add any other external packages required by the project below.
+
+# To update this file with all packages currently in your virtual environment
+# (including their exact versions), activate the environment and run:
+# pip freeze > requirements.txt
+# This is good practice to ensure consistent environments for all developers.

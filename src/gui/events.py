@@ -1,630 +1,632 @@
+# src/gui/events.py
 """
-Event handling functions for the Travel Records Management GUI.
+Event handling functions for the Travel Agent Record Management System GUI.
 
-This module manages CRUD operations and GUI listbox updates
-based on the selected record category: Client, Airline, or Flight.
+This module contains functions that are bound to GUI widget events,
+such as button clicks and listbox selections. It orchestrates interactions
+between the GUI (TravelApp instance) and the data managers.
 """
 import tkinter as tk
-from tkinter import ttk, messagebox # ttk used for consistency in update_fields
-# These imports are present in your file but not directly used by the functions
-# as manager instances are accessed via the 'app' object.
-# from record.client_manager import ClientManager
-# from record.airline_manager import AirlineManager
-# from record.flight_manager import FlightManager
+from tkinter import messagebox, simpledialog
+import datetime
 
+
+# --- Helper Functions ---
 
 def get_manager(category, app):
     """
-    Retrieve the appropriate manager instance based on the selected category.
+    Retrieves the appropriate data manager based on the selected category.
 
     Args:
-        category (str): The selected category ('Client', 'Airline', or 'Flight').
-        app: The main application instance containing manager references.
+        category (str): The currently selected record category (e.g., "Client").
+        app (TravelApp): The main application instance.
 
     Returns:
-        object: The manager instance corresponding to the selected category.
+        An instance of ClientManager, AirlineManager, or FlightManager,
+        or None if the category is unrecognized.
     """
-    managers = {
-        "Client": app.client_mgr,
-        "Airline": app.airline_mgr,
-        "Flight": app.flight_mgr,
-    }
-    return managers.get(category)
+    if category == "Client":
+        return app.client_mgr
+    if category == "Airline":
+        return app.airline_mgr
+    if category == "Flight":
+        return app.flight_mgr
+    return None
+
+
+def get_form_data_for_simple_categories(app):
+    """
+    Collects data from ttk.Entry widgets for Client and Airline categories.
+
+    Args:
+        app (TravelApp): The main application instance.
+
+    Returns:
+        dict: A dictionary of field identifiers and their values.
+    """
+    data = {}
+    for i, field_name in enumerate(app.field_names):
+        if i < len(app.entries):
+            data[field_name] = app.entries[i].get()
+        else:
+            print(f"Warning: Mismatch for {field_name} in simple form data.")
+            data[field_name] = ""
+    return data
+
+
+def _format_record_for_listbox(category, record_obj):
+    """Helper to format a record object into a display string for the listbox."""
+    display_string = "Unknown Record"
+    if category == "Client":
+        name = getattr(record_obj, 'name', 'N/A')
+        client_id = getattr(record_obj, 'client_id', 'N/A')
+        display_string = f"Client: {name} (ID: {client_id})"
+    elif category == "Airline":
+        company_name = getattr(record_obj, 'company_name', 'N/A')
+        airline_id = getattr(record_obj, 'airline_id', 'N/A')
+        display_string = f"Airline: {company_name} (ID: {airline_id})"
+    elif category == "Flight":
+        flight_id = getattr(record_obj, 'flight_id', 'N/A') # Added flight_id to display
+        client_id = getattr(record_obj, 'client_id', 'N/A')
+        airline_id = getattr(record_obj, 'airline_id', 'N/A')
+        date_val = record_obj.flight_date
+        date_str = date_val.strftime('%Y-%m-%d %H:%M') if isinstance(date_val, datetime.datetime) else str(date_val)
+        start_city = getattr(record_obj, 'start_city', 'N/A')
+        end_city = getattr(record_obj, 'end_city', 'N/A')
+        display_string = (
+            f"Flight ID: {flight_id}, Client: {client_id}, Airline: {airline_id}, "
+            f"{start_city} to {end_city} on {date_str}"
+        )
+    return display_string
+
+
+def _clear_form_widgets(app):
+    """Helper to clear all input widgets in the form."""
+    for entry in app.entries:
+        entry.delete(0, tk.END)
+
+    if hasattr(app, 'client_var'):
+        app.client_var.set("")
+    if hasattr(app, 'airline_var'):
+        app.airline_var.set("")
+
+    if hasattr(app, 'calendar') and app.calendar:
+        app.calendar.set_date(datetime.date.today())
+    if hasattr(app, 'hour_spinbox') and app.hour_spinbox:
+        app.hour_spinbox.set("00")
+    if hasattr(app, 'minute_spinbox') and app.minute_spinbox:
+        app.minute_spinbox.set("00")
+
+# --- Core GUI Event Handlers ---
 
 def load_records(app):
     """
-    Load all records into the GUI listbox for the selected category.
-    This populates app.filtered_records.
-
-    Args:
-        app: The main application instance (TravelApp).
+    Loads records for the currently selected category into the listbox.
     """
     category = app.selected_category.get()
     manager = get_manager(category, app)
 
     if not manager:
-        messagebox.showerror("Error", f"No manager found for category: {category}")
-        app.filtered_records = []
-        refresh_listbox(app) # Attempt to refresh even if manager is missing (to clear listbox)
+        messagebox.showerror(
+            "Load Error", f"No manager configured for {category}."
+        )
+        refresh_listbox(app, [])  # Clear listbox
         return
 
     try:
-        if category == "Client":
-            # Assumes client_mgr has get_all_clients() returning List[ClientRecord]
-            app.filtered_records = manager.get_all_clients()
-        elif category == "Airline":
-            # Assumes airline_mgr has a similar get_all_airlines() method
-            if hasattr(manager, "get_all_airlines"):
-                app.filtered_records = manager.get_all_airlines()
-            elif hasattr(manager, "get_all"): # Fallback
-                app.filtered_records = manager.get_all()
-            else:
-                raise AttributeError(
-                    "Manager for Airline missing get_all_airlines() or get_all()"
-                )
-        elif category == "Flight":
-            # Assumes flight_mgr has a similar get_all_flights() method
-            if hasattr(manager, "get_all_flights"):
-                app.filtered_records = manager.get_all_flights()
-            elif hasattr(manager, "get_all"): # Fallback
-                app.filtered_records = manager.get_all()
-            else:
-                raise AttributeError(
-                    "Manager for Flight missing get_all_flights() or get_all()"
-                )
+        records = []
+        if category == "Client" and hasattr(manager, 'get_all_clients'):
+            records = manager.get_all_clients()
+        elif category == "Airline" and hasattr(manager, 'get_all_airlines'):
+            records = manager.get_all_airlines()
+        elif category == "Flight" and hasattr(manager, 'get_all_flights'):
+            records = manager.get_all_flights()
+        elif hasattr(manager, 'get_all'):  # Fallback
+            records = manager.get_all()
         else:
-            app.filtered_records = []
-
-        if app.filtered_records is None: # Ensure it's always a list
-            app.filtered_records = []
-
-    except AttributeError as ae:
-        messagebox.showerror("Load Error",
-                             f"Manager for {category} missing 'get_all' method: {ae}")
-        app.filtered_records = []
-    except (IOError, ValueError) as e: # More specific exceptions
-        messagebox.showerror("Load Error", f"Failed to load {category.lower()} records: {e}")
-        app.filtered_records = []
-    except tk.TclError as e: # Catch Tcl errors specifically if they might occur during load
-        messagebox.showerror("GUI Error During Load",
-                             f"A GUI-related error occurred while loading: {e}")
-        app.filtered_records = []
-    except Exception as e: # General fallback for truly unexpected errors
-        # Consider logging this e for debugging purposes
-        messagebox.showerror("Unexpected Load Error",
-                             f"An unexpected error occurred ({type(e).__name__}): {e}")
-        app.filtered_records = []
+            messagebox.showerror(
+                "Load Error",
+                f"Manager for {category} missing 'get_all' method."
+            )
+        refresh_listbox(app, records or [])
+    except (IOError, ValueError) as e:
+        messagebox.showerror(
+            "Load Error",
+            f"Error loading {category.lower()} records: {e}"
+        )
+        refresh_listbox(app, [])
+    except Exception as e:
+        messagebox.showerror(
+            "Unexpected Load Error",
+            f"An unexpected error occurred while loading records: {e}"
+        )
+        refresh_listbox(app, [])
 
 
-    refresh_listbox(app)
-    # It's safer to reset selected_index only if record_listbox exists and was populated
-    if hasattr(app, 'record_listbox') and app.record_listbox:
-        app.selected_index = None # Reset selection
-
-def update_fields(app):
+def refresh_listbox(app, records):
     """
-    Update the form fields in the GUI based on the selected category.
-
-    This method clears the form and dynamically creates label-entry pairs using the
-    display names from fields_config. It also stores the corresponding internal field
-    keys in app.field_names for consistent record creation.
-
-    Args:
-        app: The main application instance containing field configuration and widgets.
+    Clears and repopulates the record_listbox with the provided records.
     """
-    for widget in app.form_frame.winfo_children():
-        widget.destroy()
-    app.entries.clear()
-    category = app.selected_category.get()
-    config = app.fields_config.get(category, {}) # Use .get for safety
-
-    app.field_names = list(config.values()) # These are internal attribute names
-
-    for i, (label_text, _field_key_internal_use_only) in enumerate(config.items()):
-        # Using ttk.Label and ttk.Entry for a more modern look,
-        # consistent with your gui.py's ttk usage
-        label = ttk.Label(app.form_frame, text=f"{label_text}:")
-        label.grid(row=i, column=0, sticky="e", padx=5, pady=2)
-        entry = ttk.Entry(app.form_frame, width=40) # ttk.Entry
-        entry.grid(row=i, column=1, padx=5, pady=2, sticky="we")
-        app.entries.append(entry)
-
-    # When category changes, load all records for that category and clear form
-    load_records(app)
-    # clear_form calls load_records again.
-    # The call to events.update_fields(self) in gui.py's setup_widgets
-    # happens BEFORE self.record_listbox is created. This load_records call
-    # will hit the workaround in refresh_listbox.
-    # The subsequent events.load_records(self) in gui.py's __init__ (after setup_widgets)
-    # should then correctly populate the listbox.
-
-def on_select(app, _event=None): # Added _event as listbox bindings often pass it
-    """
-    Handle the selection of a record in the listbox and populate the form fields.
-    Correctly handles ClientRecord objects.
-
-    Args:
-        app: The main application instance containing the listbox and form data.
-        _event: The event object passed by the listbox selection binding (unused).
-    """
-    # Defensive check for record_listbox existence
-    if not hasattr(app, 'record_listbox') or not app.record_listbox:
-        return # Silently exit if listbox isn't ready
+    if not (hasattr(app, 'record_listbox') and
+            app.record_listbox.winfo_exists()): # C0325: Unnecessary parens removed
+        return
 
     try:
-        selected_indices = app.record_listbox.curselection()
-        if not selected_indices:
-            app.selected_index = None
-            return
+        app.record_listbox.delete(0, tk.END)
+    except tk.TclError:
+        return # Listbox might not be ready or already destroyed
 
-        index = selected_indices[0]
-        app.selected_index = index
+    category = app.selected_category.get()
 
-        if hasattr(app, 'filtered_records') and 0 <= index < len(app.filtered_records):
-            selected_record_obj = app.filtered_records[index]
+    for record_obj in records:
+        try:
+            display_string = _format_record_for_listbox(category, record_obj)
+            app.record_listbox.insert(tk.END, display_string)
+        except tk.TclError:
+            break # Listbox likely destroyed
+        except AttributeError as ae:
+            error_msg = f"Error displaying: {ae} - {str(record_obj)}"
+            app.record_listbox.insert(tk.END, error_msg)
 
-            # app.field_names contains internal attribute names like 'name', 'address_line_1'
-            # app.entries contains the tk.Entry widgets in the same order
-            for i, field_attr_name in enumerate(app.field_names):
-                if i < len(app.entries):
-                    app.entries[i].delete(0, tk.END)
-                    value_to_display = ""
-                    # Check if selected_record_obj is an object with the attribute
-                    # or a dict with the key
-                    if hasattr(selected_record_obj, field_attr_name):
-                        value_to_display = getattr(selected_record_obj, field_attr_name, '')
-                    elif isinstance(selected_record_obj, dict):
-                        value_to_display = selected_record_obj.get(field_attr_name, '')
-
-                    app.entries[i].insert(0, str(value_to_display)) # Ensure value is string
-        else:
-            app.selected_index = None # Invalid index or filtered_records not set
-
-    except IndexError:
-        app.selected_index = None # Should not happen if curselection is valid
-    except tk.TclError: # Can happen if widget is destroyed
-        app.selected_index = None
-
-
-def get_form_data(app):
-    """
-    Retrieve data entered in the form fields as a dictionary.
-
-    This uses the field names stored in app.field_names to build a key-value
-    mapping from each entry field. Keys are internal attribute names.
-
-    Args:
-        app: The main application instance with form entries and field names.
-
-    Returns:
-        dict: A dictionary of field names to user-provided values.
-    """
-    # app.field_names are the internal attribute names like 'name', 'address_line_1'
-    # app.entries are the tk.Entry widgets
-    return {field_attr: entry.get() for field_attr, entry in zip(app.field_names, app.entries)}
 
 def clear_form(app):
     """
-    Clear the form fields and reset the selected index.
-    Reloads all records for the current category.
-
-    Args:
-        app: The main application instance containing the form entries.
+    Clears all input fields in the form and resets selections.
     """
-    for entry in app.entries:
-        entry.delete(0, tk.END)
+    _clear_form_widgets(app)
+
     app.selected_index = None
+    if hasattr(app, 'record_listbox') and app.record_listbox.winfo_exists():
+        app.record_listbox.selection_clear(0, tk.END)
 
-    # Defensive check for record_listbox
-    if hasattr(app, 'record_listbox') and app.record_listbox:
+    if hasattr(app, 'filtered_records'):
+        app.filtered_records = None
+    load_records(app)
+
+
+def _populate_flight_client_dropdown(app, record_obj):
+    """Helper to populate the client dropdown for a selected flight."""
+    if app.client_dropdown and hasattr(record_obj, 'client_id'):
         try:
-            if app.record_listbox.curselection(): # If anything is selected, deselect it
-                app.record_listbox.selection_clear(0, tk.END)
-        except tk.TclError: # Widget might be in a bad state or destroyed
-            # Pass silently as the primary goal is to clear form and load records
-            pass
+            client_obj = app.client_mgr.get_client_by_id(record_obj.client_id)
+            if client_obj and client_obj.name in app.client_dropdown['values']:
+                app.client_var.set(client_obj.name)
+            elif app.client_dropdown['values']: # Default if not found or not in list
+                app.client_var.set(app.client_dropdown['values'][0])
+        except Exception as e:
+            print(f"Error finding client for flight: {e}")
+            if app.client_dropdown['values']:
+                app.client_var.set(app.client_dropdown['values'][0])
 
-    load_records(app) # Reloads all records for the current category
+def _populate_flight_airline_dropdown(app, record_obj):
+    """Helper to populate the airline dropdown for a selected flight."""
+    if app.airline_dropdown and hasattr(record_obj, 'airline_id'):
+        try:
+            airline_obj = app.airline_mgr.get_airline_by_id(record_obj.airline_id)
+            if airline_obj and airline_obj.company_name in app.airline_dropdown['values']:
+                app.airline_var.set(airline_obj.company_name)
+            elif app.airline_dropdown['values']: # Default
+                app.airline_var.set(app.airline_dropdown['values'][0])
+        except Exception as e:
+            print(f"Error finding airline for flight: {e}")
+            if app.airline_dropdown['values']:
+                app.airline_var.set(app.airline_dropdown['values'][0])
 
-def add_record(app):
+def _populate_flight_datetime_widgets(app, record_obj):
+    """Helper to populate date and time widgets for a selected flight."""
+    flight_dt_obj = record_obj.flight_date
+    if isinstance(flight_dt_obj, datetime.datetime) and \
+       app.calendar and app.hour_spinbox and app.minute_spinbox:
+        app.calendar.set_date(flight_dt_obj.date())
+        app.hour_spinbox.set(f"{flight_dt_obj.hour:02d}")
+        app.minute_spinbox.set(f"{flight_dt_obj.minute:02d}")
+
+def _populate_flight_route_entries(app, record_obj):
+    """Helper to populate start and end city for a selected flight."""
+    start_city = getattr(record_obj, 'start_city', "")
+    end_city = getattr(record_obj, 'end_city', "")
+    if len(app.entries) > 0:
+        app.entries[0].insert(0, start_city)
+    if len(app.entries) > 1:
+        app.entries[1].insert(0, end_city)
+
+
+def on_select(app, _event=None): # W0613: Unused argument 'event' -> _event
     """
-    Add a new record based on the form data and selected category.
-
-    Args:
-        app: The main application instance containing the form data and managers.
+    Handles item selection in the record_listbox.
+    Populates the form fields with the data of the selected record.
     """
-    data = get_form_data(app) # This data dict uses internal attribute names as keys
+    if not (hasattr(app, 'record_listbox') and
+            app.record_listbox.winfo_exists()):
+        return
+
+    selected_indices = app.record_listbox.curselection()
+    if not selected_indices:
+        app.selected_index = None
+        return
+
+    app.selected_index = selected_indices[0]
     category = app.selected_category.get()
     manager = get_manager(category, app)
-
     if not manager:
-        messagebox.showerror("Error", f"No manager configured for {category}.")
         return
 
-    # Basic validation: check if the first field (often a name or primary identifier) is filled
-    if app.field_names and data.get(app.field_names[0], "").strip() == "":
-        first_field_label = list(app.fields_config[category].keys())[0]
-        messagebox.showwarning("Input Required",
-                               f"The field '{first_field_label}' is required to add a new record.")
-        return
-
-    success = False
-    try:
+    source_records = []
+    if hasattr(app, 'filtered_records') and app.filtered_records is not None:
+        source_records = app.filtered_records
+    else:
         if category == "Client":
-            # Assumes manager.add_client(data_dict)
-            result = manager.add_client(data)
-            success = bool(result) # True if an object is returned, or if it's literally True
+            source_records = manager.get_all_clients()
         elif category == "Airline":
-            # Assumes manager.add_airline(data_dict)
-            if hasattr(manager, "add_airline"):
-                result = manager.add_airline(data)
-                success = bool(result)
-            else:
-                raise NotImplementedError("add_airline method not implemented in AirlineManager")
+            source_records = manager.get_all_airlines()
         elif category == "Flight":
-            # Assumes manager.add_flight(data_dict)
-            if hasattr(manager, "add_flight"):
-                result = manager.add_flight(data)
-                success = bool(result)
-            else:
-                raise NotImplementedError("add_flight method not implemented in FlightManager")
+            source_records = manager.get_all_flights()
 
-        if success:
-            messagebox.showinfo("Success", f"{category} record added successfully.")
-            load_records(app)
-            # User's clear_form reloads records, so this is fine.
+    if not (0 <= app.selected_index < len(source_records)):
+        messagebox.showwarning("Selection Error", "Selected index out of bounds.")
+        _clear_form_widgets(app) # Use helper to clear form widgets
+        return
+
+    record_obj = source_records[app.selected_index]
+    _clear_form_widgets(app) # Clear form before populating
+
+    if category in ("Client", "Airline"): # R1714: consider-using-in
+        if hasattr(record_obj, 'to_dict'):
+            data_dict = record_obj.to_dict()
+            for i, field_key in enumerate(app.field_names):
+                if i < len(app.entries):
+                    app.entries[i].insert(0, data_dict.get(field_key, ""))
+    elif category == "Flight":
+        _populate_flight_client_dropdown(app, record_obj)
+        _populate_flight_airline_dropdown(app, record_obj)
+        _populate_flight_datetime_widgets(app, record_obj)
+        _populate_flight_route_entries(app, record_obj)
+
+    if app.record_listbox.winfo_exists():
+        app.record_listbox.selection_set(app.selected_index)
+        app.record_listbox.activate(app.selected_index)
+        app.record_listbox.see(app.selected_index)
+
+
+def _get_flight_data_from_form(app):
+    """Helper to collect and validate flight data from the form."""
+    if not (app.client_var.get() and app.airline_var.get()):
+        messagebox.showwarning("Input Required", "Client and Airline are required.")
+        return None
+
+    client_name = app.client_var.get()
+    airline_name = app.airline_var.get()
+
+    client_id_val = None
+    found_client = next(
+        (c for c in app.client_mgr.get_all_clients() if c.name == client_name),
+        None
+    )
+    if found_client:
+        client_id_val = found_client.client_id
+    else:
+        messagebox.showerror("Error", f"Client '{client_name}' not found.")
+        return None
+
+    airline_id_val = None
+    found_airline = next(
+        (a for a in app.airline_mgr.get_all_airlines()
+         if a.company_name == airline_name),
+        None
+    )
+    if found_airline:
+        airline_id_val = found_airline.airline_id
+    else:
+        messagebox.showerror("Error", f"Airline '{airline_name}' not found.")
+        return None
+
+    try:
+        selected_date = app.calendar.get_date()
+        hour = int(app.hour_spinbox.get())
+        minute = int(app.minute_spinbox.get())
+        flight_datetime = datetime.datetime.combine(
+            selected_date, datetime.time(hour, minute)
+        )
+    except ValueError:
+        messagebox.showerror("Input Error", "Invalid hour or minute. Must be numbers.")
+        return None
+    except AttributeError:
+        messagebox.showerror("GUI Error", "Date/Time widgets not found.")
+        return None
+
+    start_city = ""
+    if len(app.entries) > 0: # C0321: multiple-statements - fixed
+        start_city = app.entries[0].get().strip()
+
+    end_city = ""
+    if len(app.entries) > 1: # C0321: multiple-statements - fixed
+        end_city = app.entries[1].get().strip()
+
+
+    if not (start_city and end_city): # C0321: multiple-statements - fixed
+        messagebox.showwarning("Input Required", "Start and End City are required.")
+        return None
+
+    return {
+        "record_type": "Flight",
+        "Client_ID": client_id_val,
+        "Airline_ID": airline_id_val,
+        "Date": flight_datetime.isoformat(),
+        "Start City": start_city,
+        "End City": end_city
+    }
+
+# --- CRUD Operations ---
+
+def add_record(app):
+    """Adds a new record based on the form data and selected category."""
+    category = app.selected_category.get()
+    manager = get_manager(category, app)
+    if not manager:
+        messagebox.showerror("Error", f"No manager for {category}.")
+        return
+
+    data_to_add = {}
+    if category == "Flight":
+        data_to_add = _get_flight_data_from_form(app)
+        if data_to_add is None:
+            return
+    else:  # Client or Airline
+        data_to_add = get_form_data_for_simple_categories(app)
+        if app.field_names and not data_to_add.get(app.field_names[0], "").strip():
+            first_field_label = list(app.fields_config[category].keys())[0]
+            messagebox.showwarning(
+                "Input Required", f"The field '{first_field_label}' is required."
+            )
+            return
+        if "record_type" not in data_to_add:
+            data_to_add["record_type"] = category
+
+    try:
+        result = None
+        if category == "Client":
+            result = manager.add_client(data_to_add)
+        elif category == "Airline":
+            result = manager.add_airline(data_to_add)
+        elif category == "Flight":
+            result = manager.add_flight(data_to_add)
+
+        if result:
+            messagebox.showinfo("Success", f"{category} record added.")
             clear_form(app)
         else:
-            # This might be hit if add_... returns None or False
-            messagebox.showerror("Error",
-                                 f"Failed to add {category.lower()} record. "
-                                 "Manager reported no success.")
-    except ValueError as ve: # For validation errors from manager
-        messagebox.showerror("Add Error", f"Could not add {category.lower()}: {ve}")
-    except NotImplementedError as nie:
-        messagebox.showerror("Error", str(nie))
-    except (IOError, tk.TclError) as e: # More specific for add context
-        messagebox.showerror("Add Operation Error",
-                             f"An error occurred while adding {category.lower()}: {e}")
-    except Exception as e: # General fallback
-        # Consider logging this 'e' for debugging purposes
-        messagebox.showerror("Unexpected Add Error",
-                             f"An unexpected error occurred ({type(e).__name__}): {e}")
+            messagebox.showerror("Add Error", f"Failed to add {category.lower()}.")
+    except Exception as e: # W0718: Catching too general exception
+        messagebox.showerror("Unexpected Add Error", f"Error: {e}")
 
 
 def update_record(app):
-    """
-    Update the selected record with the data from the form.
-    """
-    if app.selected_index is None or not (
-            hasattr(app, 'filtered_records') and
-            0 <= app.selected_index < len(app.filtered_records)):
-        messagebox.showwarning("Selection Error", "No valid record selected to update.")
-        return
-
-    data = get_form_data(app) # New data from form, keys are internal attribute names
+    """Updates the selected record with data from the form."""
     category = app.selected_category.get()
     manager = get_manager(category, app)
 
+    is_valid_selection = (
+        app.selected_index is not None and
+        hasattr(app, 'record_listbox') and
+        0 <= app.selected_index < app.record_listbox.size()
+    )
+    if not is_valid_selection:
+        messagebox.showwarning("Selection Error", "No record selected to update.")
+        return
     if not manager:
-        messagebox.showerror("Error", f"No manager configured for {category}.")
+        messagebox.showerror("Error", f"No manager for {category}.")
         return
 
-    original_record_obj = app.filtered_records[app.selected_index]
-    success = False # Initialize success
+    original_record_id_details = None
+    source_records = []
+    if hasattr(app, 'filtered_records') and app.filtered_records is not None:
+        source_records = app.filtered_records
+    else:
+        if category == "Client":
+            source_records = manager.get_all_clients()
+        elif category == "Airline":
+            source_records = manager.get_all_airlines()
+        elif category == "Flight":
+            source_records = manager.get_all_flights()
+
+    if 0 <= app.selected_index < len(source_records):
+        selected_obj = source_records[app.selected_index]
+        if category == "Client":
+            original_record_id_details = selected_obj.client_id
+        elif category == "Airline":
+            original_record_id_details = selected_obj.airline_id
+        elif category == "Flight":
+            original_record_id_details = selected_obj.to_dict()
+            if 'record_type' in original_record_id_details:
+                del original_record_id_details['record_type']
+    else:
+        messagebox.showerror("Error", "Could not retrieve selected record.")
+        return
+
+    if original_record_id_details is None:
+        messagebox.showerror("Update Error", "Could not identify record to update.")
+        return
+
+    updated_data = {}
+    if category == "Flight":
+        updated_data = _get_flight_data_from_form(app)
+        if updated_data is None:
+            return
+        if 'record_type' in updated_data:
+            del updated_data['record_type']
+    else:  # Client or Airline
+        updated_data = get_form_data_for_simple_categories(app)
+        if app.field_names and not updated_data.get(app.field_names[0], "").strip():
+            first_field_label = list(app.fields_config[category].keys())[0]
+            messagebox.showwarning(
+                "Input Required", f"Field '{first_field_label}' is required."
+            )
+            return
+        if "record_type" not in updated_data:
+             updated_data["record_type"] = category
 
     try:
+        success = False
         if category == "Client":
-            client_id_to_update = getattr(original_record_obj, 'client_id', None)
-            if client_id_to_update:
-                # ClientManager.update_client expects (client_id, update_info_dict)
-                success = manager.update_client(client_id_to_update, data)
-            else:
-                messagebox.showerror("Error", "Could not find client_id for update.")
-                return
+            success = manager.update_client(original_record_id_details, updated_data)
         elif category == "Airline":
-            if hasattr(manager, "update_airline"):
-                airline_id_to_update = getattr(original_record_obj, 'airline_id',
-                                               getattr(original_record_obj, 'id', None))
-                if airline_id_to_update:
-                    success = manager.update_airline(airline_id_to_update, data)
-                else: # Fallback to passing object if ID not found easily
-                    success = manager.update_airline(original_record_obj, data)
-            else:
-                raise NotImplementedError(
-                    f"update_airline method not implemented in {type(manager).__name__}"
-                )
+            success = manager.update_airline(original_record_id_details, updated_data)
         elif category == "Flight":
-            if hasattr(manager, "update_flight"):
-                flight_id_to_update = getattr(original_record_obj, 'flight_id',
-                                              getattr(original_record_obj, 'id', None))
-                if flight_id_to_update:
-                    success = manager.update_flight(flight_id_to_update, data)
-                else:
-                    success = manager.update_flight(original_record_obj, data)
-            else:
-                raise NotImplementedError(
-                    f"update_flight method not implemented in {type(manager).__name__}"
-                )
-        else: # Should not be reached if category is one of the three
-            messagebox.showerror("Error", f"Update logic not defined for category: {category}")
-            return
+            success = manager.update_flight(original_record_id_details, updated_data)
 
         if success:
-            messagebox.showinfo("Success", f"{category} record updated successfully.")
-            load_records(app)
-            clear_form(app) # clear_form itself calls load_records
+            messagebox.showinfo("Success", f"{category} record updated.")
+            clear_form(app)
         else:
-            messagebox.showerror("Error",
-                                 f"Failed to update {category.lower()} record. "
-                                 "Manager reported failure.")
-    except NotImplementedError as nie:
-        messagebox.showerror("Error", str(nie))
-    except (ValueError, IOError, tk.TclError) as e: # More specific
-        messagebox.showerror("Update Operation Error", f"Error updating {category.lower()}: {e}")
-    except Exception as e: # General fallback
-        # Consider logging this 'e' for debugging purposes
-        messagebox.showerror("Unexpected Update Error",
-                             f"An unexpected error occurred ({type(e).__name__}): {e}")
+            messagebox.showerror("Update Error", f"Failed to update {category.lower()}.")
+    except Exception as e: # W0718: Catching too general exception
+        messagebox.showerror("Unexpected Update Error", f"Error: {e}")
 
 
 def delete_record(app):
-    """
-    Delete the selected record.
-    """
-    if app.selected_index is None or not (
-            hasattr(app, 'filtered_records') and
-            0 <= app.selected_index < len(app.filtered_records)):
-        messagebox.showwarning("Selection Error", "No valid record selected to delete.")
-        return
-
+    """Deletes the selected record."""
     category = app.selected_category.get()
     manager = get_manager(category, app)
 
+    is_valid_selection = (
+        app.selected_index is not None and
+        hasattr(app, 'record_listbox') and
+        0 <= app.selected_index < app.record_listbox.size()
+    )
+    if not is_valid_selection:
+        messagebox.showwarning("Selection Error", "No record selected to delete.")
+        return
     if not manager:
-        messagebox.showerror("Error", f"No manager configured for {category}.")
+        messagebox.showerror("Error", f"No manager for {category}.")
         return
 
-    record_to_delete_obj = app.filtered_records[app.selected_index]
-    success = False # Initialize success
+    record_id_details = None # For flights, this will be a dict
+    record_id_to_delete = None # For client/airline, this will be the ID
 
-    display_name_for_confirm = str(record_to_delete_obj) # Default display
-    if hasattr(record_to_delete_obj, 'name'):
-        display_name_for_confirm = getattr(record_to_delete_obj, 'name',
-                                           str(record_to_delete_obj))
-    elif hasattr(record_to_delete_obj, 'company_name'):
-        display_name_for_confirm = getattr(record_to_delete_obj, 'company_name',
-                                           str(record_to_delete_obj))
+    source_records = []
+    if hasattr(app, 'filtered_records') and app.filtered_records is not None:
+        source_records = app.filtered_records
+    else:
+        if category == "Client":
+            source_records = manager.get_all_clients()
+        elif category == "Airline":
+            source_records = manager.get_all_airlines()
+        elif category == "Flight":
+            source_records = manager.get_all_flights()
 
-    confirm_message = (f"Are you sure you want to delete this {category.lower()} record: "
-                       f"'{display_name_for_confirm}'?")
-    if not messagebox.askyesno("Confirm Delete", confirm_message):
+    if 0 <= app.selected_index < len(source_records):
+        selected_obj = source_records[app.selected_index]
+        if category == "Client":
+            record_id_to_delete = selected_obj.client_id
+        elif category == "Airline":
+            record_id_to_delete = selected_obj.airline_id
+        elif category == "Flight":
+            record_id_details = selected_obj.to_dict()
+            if 'record_type' in record_id_details:
+                del record_id_details['record_type']
+    else:
+        messagebox.showerror("Error", "Could not retrieve selected record.")
+        return
+
+    if record_id_to_delete is None and record_id_details is None:
+        messagebox.showerror("Delete Error", "Could not identify record to delete.")
+        return
+
+    confirm_msg = f"Are you sure you want to delete this {category.lower()} record?"
+    confirm_delete = messagebox.askyesno("Confirm Delete", confirm_msg)
+    if not confirm_delete:
         return
 
     try:
+        success = False
         if category == "Client":
-            client_id_to_delete = getattr(record_to_delete_obj, 'client_id', None)
-            if client_id_to_delete:
-                # ClientManager.delete_client expects client_id
-                success = manager.delete_client(client_id_to_delete)
-            else:
-                messagebox.showerror("Error", "Could not find client_id for deletion.")
-                return
+            success = manager.delete_client(record_id_to_delete)
         elif category == "Airline":
-            if hasattr(manager, "delete_airline"):
-                airline_id_to_delete = getattr(record_to_delete_obj, 'airline_id',
-                                               getattr(record_to_delete_obj, 'id', None))
-                if airline_id_to_delete:
-                    success = manager.delete_airline(airline_id_to_delete)
-                else: # Fallback: some managers might expect the object
-                    success = manager.delete_airline(record_to_delete_obj)
-            else:
-                raise NotImplementedError(
-                    f"delete_airline method not implemented in {type(manager).__name__}"
-                )
+            success = manager.delete_airline(record_id_to_delete)
         elif category == "Flight":
-            if hasattr(manager, "delete_flight"):
-                # Flight manager might expect a dict (as in main.py demo) or an ID
-                if hasattr(record_to_delete_obj, 'to_dict'):
-                    success = manager.delete_flight(record_to_delete_obj.to_dict())
-                else: # Fallback to ID or object
-                    flight_id_to_delete = getattr(record_to_delete_obj, 'flight_id',
-                                                  getattr(record_to_delete_obj, 'id', None))
-                    if flight_id_to_delete:
-                        success = manager.delete_flight(flight_id_to_delete)
-                    else:
-                        success = manager.delete_flight(record_to_delete_obj) # Last resort
-            else:
-                raise NotImplementedError(
-                    f"delete_flight method not implemented in {type(manager).__name__}"
-                )
-        else:
-            messagebox.showerror("Error", f"Delete logic not defined for category: {category}")
-            return
+            success = manager.delete_flight(record_id_details)
 
         if success:
-            messagebox.showinfo("Success", f"{category} record deleted successfully.")
-            load_records(app)
-            clear_form(app) # clear_form itself calls load_records
+            messagebox.showinfo("Success", f"{category} record deleted.")
+            clear_form(app)
         else:
-            messagebox.showerror("Error",
-                                 f"Failed to delete {category.lower()} record. "
-                                 "Manager reported failure.")
-    except NotImplementedError as nie:
-        messagebox.showerror("Error", str(nie))
-    except (IOError, ValueError, tk.TclError) as e: # More specific
-        messagebox.showerror("Delete Operation Error", f"Error deleting {category.lower()}: {e}")
-    except Exception as e: # General fallback
-        # Consider logging this 'e' for debugging purposes
-        messagebox.showerror("Unexpected Delete Error",
-                             f"An unexpected error occurred ({type(e).__name__}): {e}")
+            messagebox.showerror("Delete Error", f"Failed to delete {category.lower()}.")
+    except Exception as e: # W0718: Catching too general exception
+        messagebox.showerror("Unexpected Delete Error", f"Error: {e}")
 
 
 def search_records(app):
     """
-    Search for records based on data in any of the form fields.
-    Uses the manager's 'search' method.
-
-    Args:
-        app: The main application instance (TravelApp).
+    Searches records based on a query and updates the listbox.
     """
     category = app.selected_category.get()
     manager = get_manager(category, app)
-
     if not manager:
-        messagebox.showerror("Error", f"No manager configured for category: {category}")
+        messagebox.showerror("Error", f"No manager for {category}.")
         return
 
-    if not app.entries or not hasattr(app, 'field_names') or not app.field_names:
-        messagebox.showwarning("Search Error",
-                               "Form fields are not properly initialized for search.")
+    search_term = simpledialog.askstring(
+        "Search", f"Enter search term for {category}s:"
+    )
+    if search_term is None: # User cancelled
+        return
+    if not search_term.strip():
+        messagebox.showinfo("Search", "Search term empty. Displaying all.")
+        app.filtered_records = None
+        load_records(app)
         return
 
-    # Get all data from the form
-    all_form_data = get_form_data(app)
+    search_term = search_term.lower()
+    all_records = []
+    if category == "Client":
+        all_records = manager.get_all_clients()
+    elif category == "Airline":
+        all_records = manager.get_all_airlines()
+    elif category == "Flight":
+        all_records = manager.get_all_flights()
 
-    # Filter out empty fields to create the search criteria
-    # The manager's search method (e.g., ClientManager.find_clients)
-    # is designed to handle a dictionary of criteria.
-    search_criteria = {
-        key: value for key, value in all_form_data.items() if value.strip()
-    }
-
-    if not search_criteria:
-        messagebox.showinfo("Search",
-                            "All search fields are empty. Loading all records for the category.")
-        load_records(app) # Load all records if no criteria are entered
-        return
-
-    try:
-        # All managers (Client, Airline, Flight) are expected to have a 'search(criteria_dict)'
-        # method. For ClientManager, this is an alias for find_clients(criteria_dict).
-        if hasattr(manager, "search"):
-            app.filtered_records = manager.search(search_criteria)
-        else:
-            messagebox.showerror("Error", f"Manager for {category} missing 'search' method.")
-            app.filtered_records = [] # Reset if search method is missing
-
-        if app.filtered_records is None: # Ensure filtered_records is a list
-            app.filtered_records = []
-
-        refresh_listbox(app) # Update the GUI listbox with search results
-
-        if not app.filtered_records:
-            # Create a string of the search criteria for the message
-            criteria_parts = []
-            for k, v in search_criteria.items():
-                # Get display label for the attribute key k
-                label = k # fallback to internal key
-                if category in app.fields_config:
-                    for display_label, internal_key in app.fields_config[category].items():
-                        if internal_key == k:
-                            label = display_label
-                            break
-                criteria_parts.append(f"{label}: '{v}'")
-            criteria_str = ", ".join(criteria_parts)
-            messagebox.showinfo("Search Results",
-                                f"No {category.lower()} records found matching: {criteria_str}.")
-
-    except (ValueError, TypeError, tk.TclError) as e: # More specific
-        messagebox.showerror("Search Operation Error",
-                             f"An error occurred during search for {category.lower()} records: {e}")
-        app.filtered_records = [] # Clear results on error
-        refresh_listbox(app)
-    except Exception as e: # General fallback
-        # Consider logging this 'e' for debugging purposes
-        messagebox.showerror("Unexpected Search Error",
-                             f"An unexpected error occurred ({type(e).__name__}): {e}")
-        app.filtered_records = []
-        refresh_listbox(app)
-
-
-def refresh_listbox(app):
-    """
-    Refresh the listbox with the current content of app.filtered_records.
-    Correctly displays ClientRecord objects and provides a fallback for others.
-
-    Args:
-        app: The main application instance (TravelApp).
-    """
-    # Workaround for AttributeError: 'TravelApp' object has no attribute 'record_listbox'
-    # This occurs if refresh_listbox is called before app.record_listbox is initialized in gui.py
-    if not hasattr(app, 'record_listbox') or not app.record_listbox:
-        # print("DEBUG: refresh_listbox called before app.record_listbox was initialized. skip.")
-        return
-
-    try:
-        app.record_listbox.delete(0, tk.END) # Clear existing items
-    except tk.TclError: # Can happen if widget is destroyed or not fully ready
-        # print("DEBUG: tk.TclError in refresh_listbox while deleting items. Listbox is not ready.")
-        return
-
-
-    if not hasattr(app, 'filtered_records') or not app.filtered_records:
-        app.record_listbox.insert(tk.END, "No records to display.")
-        return
-
-    category = app.selected_category.get()
-
-    for record_obj in app.filtered_records:
-        display_string = ""
-        # Create a display string for the listbox item
-        if category == "Client": # Specifically handle ClientRecord objects
-            # Check if it's an object and has expected attributes for ClientRecord
-            if (isinstance(record_obj, object) and
-                    hasattr(record_obj, 'client_id') and hasattr(record_obj, 'name')):
-                name = getattr(record_obj, 'name', 'N/A')
-                client_id = getattr(record_obj, 'client_id', 'N/A')
-                display_string = f"Client: {name} (ID: {client_id})"
-            elif isinstance(record_obj, dict): # If it's a dict (e.g. from other managers)
-                display_string = (f"Client: {record_obj.get('name', 'N/A')} "
-                                  f"(ID: {record_obj.get('client_id', 'N/A')})")
-            else:
-                display_string = str(record_obj) # Fallback
-
+    app.filtered_records = []
+    for record in all_records:
+        match = False
+        searchable_attrs = []
+        if category == "Client":
+            searchable_attrs = ['name', 'city', 'country', 'phone_number']
         elif category == "Airline":
-            # Assuming Airline records might be objects or dicts
-            if (isinstance(record_obj, object) and
-                    hasattr(record_obj, 'airline_id') and hasattr(record_obj, 'company_name')):
-                company_name = getattr(record_obj, 'company_name', 'N/A')
-                airline_id = getattr(record_obj, 'airline_id', 'N/A')
-                display_string = f"Airline: {company_name} (ID: {airline_id})"
-            elif isinstance(record_obj, dict):
-                airline_id_val = record_obj.get('id', record_obj.get('airline_id', 'N/A'))
-                display_string = (f"Airline: {record_obj.get('company_name', 'N/A')} "
-                                  f"(ID: {airline_id_val})")
-            else:
-                display_string = str(record_obj)
-
+            searchable_attrs = ['company_name']
         elif category == "Flight":
-            # Assuming Flight records might be objects or dicts
-            if isinstance(record_obj, object):
-                flight_id = getattr(record_obj, 'id',
-                                    getattr(record_obj, 'flight_id', 'N/A'))
-                client_id = getattr(record_obj, 'client_id', 'N/A')
-                airline_id = getattr(record_obj, 'airline_id', 'N/A')
-                date = getattr(record_obj, 'date', 'N/A')
-                display_string = (f"Flight: ID {flight_id}, Client {client_id}, "
-                                  f"Airline {airline_id}, Date {date}")
-            elif isinstance(record_obj, dict):
-                flight_id = record_obj.get('id', record_obj.get('flight_id', 'N/A'))
-                client_id = record_obj.get('client_id', 'N/A')
-                airline_id = record_obj.get('airline_id', 'N/A')
-                date = record_obj.get('date', 'N/A')
-                display_string = (f"Flight: ID {flight_id}, Client {client_id}, "
-                                  f"Airline {airline_id}, Date {date}")
-            else:
-                display_string = str(record_obj)
-        else:
-            # Generic fallback if category is unknown or record_obj is not as expected
-            if isinstance(record_obj, dict):
-                # Display first 3 key-value pairs
-                items_to_display = list(record_obj.items())[:3]
-                display_string = ", ".join(f"{k}: {v}" for k, v in items_to_display)
-            else:
-                display_string = str(record_obj)
-        try:
-            app.record_listbox.insert(tk.END, display_string)
-        except tk.TclError: # Widget might be destroyed during loop
-            # print("DEBUG: tk.TclError in refresh_listbox while inserting items. ")
-            break # Exit loop if listbox is no longer usable
+            searchable_attrs = ['client_id', 'airline_id', 'start_city', 'end_city']
+            if search_term in record.flight_date.isoformat():
+                match = True
+        else: # Default generic search
+            if hasattr(record, 'to_dict'):
+                for value in record.to_dict().values():
+                    if search_term in str(value).lower():
+                        match = True
+                        break
+            elif search_term in str(record).lower():
+                match = True
+
+        if not match:
+            for attr in searchable_attrs:
+                if hasattr(record, attr):
+                    attr_value = str(getattr(record, attr, "")).lower()
+                    if search_term in attr_value:
+                        match = True
+                        break
+        if match:
+            app.filtered_records.append(record)
+
+    # ... previous code in search_records ...
+
+    if not app.filtered_records:
+        no_match_msg = f"No {category.lower()} records found matching '{search_term}'."
+        messagebox.showinfo("Search Results", no_match_msg)
+    else:
+        found_msg = (
+            f"Found {len(app.filtered_records)} matching "
+            f"{category.lower()} record(s)."
+        )
+        messagebox.showinfo("Search Results", found_msg)
+
+    refresh_listbox(app, app.filtered_records)
+    app.selected_index = None
