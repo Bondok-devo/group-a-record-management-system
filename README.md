@@ -76,7 +76,7 @@ Follow these instructions to set up the project locally and run the application.
 
     Open your terminal or command prompt and run:
     ```bash
-    git clone [https://github.com/Bondok-devo/group-a-record-management-system.git](https://github.com/Bondok-devo/group-a-record-management-system.git)
+    git clone https://github.com/Bondok-devo/group-a-record-management-system.git
     cd group-a-record-management-system
     ```
 
